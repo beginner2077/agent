@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-**当前进入 Fall2026 第二周官方 MCP 实操，测试仓库已选 beginner2077/agent；用户授权先发布当前学习内容并创建练习 Issue。本次发布进行中，GitHub App、MCP 服务及 OAuth 尚未实现。第二周核心材料已导读，不代表整周验收；第一周未读材料与正式 writeup 等缺口保留。实际最新状态以“下一次教学步骤”首段为准。**
+**当前进入 Fall2026 第二周官方 MCP 实操：beginner2077/agent 已推送初始学习内容并创建练习 Issue #4/#5/#6。下一步注册限权 GitHub App；MCP 服务与其 OAuth 尚未实现。第二周核心材料已导读，不代表整周验收；第一周未读材料与正式 writeup 等缺口保留。实际最新状态以“下一次教学步骤”首段为准。**
 
 - 目标：跟随 Stanford CS146S Fall 2026，理解模型、工具、harness、上下文与验证循环，再逐步练习代码。
 - 学习者已有工作经验，希望小步推进，避免一次铺开大量概念或工程设施。
@@ -75,7 +75,7 @@
 | Claude 实际启动方式 | 用户显式执行 `claude --settings C:\Users\admin\.claude\settings-deepseek.json`；不能假定使用默认 `settings.json` |
 | 先前 Claude 登录检查 | 仅说明客户端存在登录信息，不能证明当前请求实际使用 Anthropic 模型 |
 | PyCharm | 用户确认可正常打开；桌面自动控制连接失败，IDE 当前解释器选择状态未经自动核实 |
-| Git | 仓库 main 首次发布进行中；origin 为 beginner2077/agent，仅仓库内使用 GitHub noreply 作者；官方副本及虚拟环境忽略，仅显式纳入四个课堂样例/测试文件 |
+| Git | main 已推送至 origin beginner2077/agent，首次提交 cbc41c9；仅仓库内使用 GitHub noreply 作者，全局身份不变；练习 Issue #4/#5/#6 已创建 |
 
 两套虚拟环境依赖本机 Codex runtime 中已有的 Python 3.12.14 基础解释器；移除该解释器后需重建环境。此问题与课程代码、模型订阅和 API 接入方式无关。
 
@@ -107,7 +107,7 @@ Claude 启动入口默认选取 `%USERPROFILE%\.claude\settings-deepseek.json`�
 
 ## 下一次教学步骤
 
-当前教学（优先）：用户已指定个人仓库 https://github.com/beginner2077/agent，并明确要求先提交推送当前学习内容，再创建几个 Issue 用于后续学习。本次授权优先于历史练习中的不提交/不推送约定，仅适用于此次发布。仅本仓库 Git 作者设置为 beginner2077 <97858703+beginner2077@users.noreply.github.com>，origin 指向该仓库；全局身份不变。当前正在完成首次发布与练习 Issue 创建，尚不能宣称远端已完成；无可用 GitHub 凭据，正在尝试 Git Credential Manager 登录。13 项离线测试已通过（week1_trace 6 项及课堂适配 7 项），无真实模型请求。只纳入明确的课堂样例与离线测试，虚拟环境、命名配置、抓包和凭据不入库。发布完成后继续第二周 GitHub App 用户 OAuth 实操：固定 beginner2077/agent，3 个工具 list_issues/get_issue/set_issue_state，排除 PR，issue_number 使用 GitHub number，写工具默认 dry_run=True。Git 推送登录不等于 MCP GitHub App OAuth 已实现；App 未注册、FastMCP/MCP 依赖未安装、服务与 OAuth 代码未实现。下一教学步为注册限权 App，仅安装此仓库，Issues 读写及必需 Metadata 读取，再分步授权和实现；不自动完成后续作业。不改 Claude 命名配置，课堂 deepseek-flash 不变；正式 writeup 未代填，第一周缺口保留。
+当前教学（优先）：2026-11-04 用户指定 https://github.com/beginner2077/agent，授权先提交推送当前学习内容，再创建练习 Issue。首次提交 cbc41c9 已推送 main；Git Credential Manager 设备登录已由用户授权，账号 beginner2077，已创建并通过 GitHub REST API 逐个读取核对 3 个 open Issue：#4 查询列表与详情 https://github.com/beginner2077/agent/issues/4；#5 专用状态变更测试 https://github.com/beginner2077/agent/issues/5；#6 错误结果与授权失效恢复 https://github.com/beginner2077/agent/issues/6。只创建练习数据，未关闭/重开 Issue、撤销授权或修改权限；后续状态应重新读取。本次直接 API 创建不是 MCP 运行证据，Git 登录不等于 MCP GitHub App OAuth 已实现。仅本仓库 Git 作者为 beginner2077 <97858703+beginner2077@users.noreply.github.com>，origin 指向该仓库，全局身份未改。22 个初始提交文件已扫描未发现凭据；13 项离线测试通过（week1_trace 6 项、课堂适配 7 项），无真实模型请求。仅显式纳入四个课堂样例/测试文件，虚拟环境、命名配置、抓包和凭据不入库。已同步 README 与 week2/README 的实际链接。本次发布授权优先于历史练习不提交/不推送约定，仅适用于此次发布。下一教学小步为注册限权 GitHub App，仅安装 beginner2077/agent，Issues 读写及必需 Metadata 读取，再逐步授权和实现；App 未注册、FastMCP/MCP 依赖未安装、服务与 OAuth 代码未实现，不自动完成后续作业。工具契约 list_issues/get_issue/set_issue_state：固定仓库、排除 PR、issue_number 使用 GitHub number、写工具默认 dry_run=True；#5 为后续写操作专用对象，执行时明确目标状态并先预览。不改 Claude 命名配置，课堂 deepseek-flash 不变；正式 writeup 未代填，第一周缺口保留。
 
 最新续课：§5迁移检查通过，学习者指出应覆盖其他具备写入能力的工具；已补脚本/子进程与实际目标。§6.2—6.3及§7.1已导读工具池筛选/按需加载及多源上下文；用户正确判断仅工具名不足以直接调用，但把加载定义和补权限合并，已明确纠正：定义提供用途/参数/类型/必填项，具体调用仍需独立授权。现进入§7.2—7.3：规则作用域（组织/用户/项目/本地及按路径加载）、自动记忆与任务摘要/原始日志的区别、渐进压缩和重新加载；压缩机制的具体函数/实验开关简略，不声称本机全部启用。依据论文与Claude官方memory/how-claude-code-works文档，不自动创建记忆/规则或触发压缩。当前迁移检查待答：长期记忆里记录上次6项通过，后来源文件变化，能否作为当前版本通过证据及原因。§8核心内容待导读，视频/X原文缺口保留，不标整周完成。
 

@@ -8,6 +8,16 @@
 
 当前发布使用 Git 的独立登录，不代表第二周 MCP 的 GitHub App OAuth 已完成。提交作者仅在本仓库设置为 `beginner2077 <97858703+beginner2077@users.noreply.github.com>`，不更改全局 Git 身份。
 
+2026-11-04：首次学习内容提交 `cbc41c9` 已推送至 `main`；13 项离线测试通过（第一周修复 6 项、课堂 DeepSeek 适配 7 项）。通过 Git Credential Manager 完成 Git 登录，再通过 GitHub REST API 创建并逐个读取核对下列练习 Issue；这不属于已实现 MCP 服务的运行证据。
+
+| 练习 Issue | 后续用途 | 创建后核对状态 |
+| --- | --- | --- |
+| [#4 查询列表并读取详情](https://github.com/beginner2077/agent/issues/4) | `list_issues → get_issue` 只读链式演示 | open |
+| [#5 专用状态变更测试](https://github.com/beginner2077/agent/issues/5) | 验证默认预览零写入；后续关闭、读取、重新打开 | open |
+| [#6 错误结果与授权失效恢复](https://github.com/beginner2077/agent/issues/6) | 参数错误及授权恢复，先用模拟端点覆盖 | open |
+
+当前只创建练习数据，未执行关闭/重开、撤销授权或修改权限。上述状态是创建后读取的结果，后续练习应重新查询实际状态。
+
 ## 目标和范围
 
 在一个用户指定的个人专用测试仓库中，列出 Issue、读取详情、预览并修改指定测试 Issue 的开关状态。代码通过 stdio 向 Claude Code 提供工具，由 DeepSeek 模型使用。
@@ -42,7 +52,7 @@ Client Secret、访问令牌与刷新令牌只在本机配置或缓存中管理�
 
 ## 小步实施与验收
 
-1、测试仓库已选定；完成当前内容发布与练习 Issue 创建后，注册并限权安装 GitHub App。
+1、测试仓库、当前内容发布与练习 Issue 创建已完成；下一步注册并限权安装 GitHub App。
 
 2、选定、安装并记录 FastMCP/SDK 版本；用最小 stdio 例子核对实际协议支持，保持课堂脚本的 DeepSeek 配置。
 

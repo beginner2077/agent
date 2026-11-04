@@ -2,7 +2,7 @@
 
 从课程开始独立学习，不引用其他业务项目的 docs、AGENTS 或 Skill 模板。练习代码放在本项目中，保留已有 PyCharm `main.py`。
 
-**当前进度以 [学习交接](LEARNING_HANDOFF.md) 和 [第一周覆盖清单](WEEK1_LEARNING_CHECKLIST.md) 为准。** 已选择 Claude Code + DeepSeek。第二周课堂文字稿及指定阅读核心已中文导读，官方MCP作业选用GitHub App用户OAuth，测试仓库已指定为 [beginner2077/agent](https://github.com/beginner2077/agent)；[工具契约草案](week2/README.md)已建立，尚未安装MCP依赖或开始服务编码。用户已授权发布当前学习内容及创建练习 Issue，实际发布状态见学习交接。第一周视频/X原文、部分材料与正式writeup等缺口继续保留，不以局部检查代替整周验收。基础可简讲，新概念与前置不能跳过。
+**当前进度以 [学习交接](LEARNING_HANDOFF.md) 和 [第一周覆盖清单](WEEK1_LEARNING_CHECKLIST.md) 为准。** 已选择 Claude Code + DeepSeek。第二周课堂文字稿及指定阅读核心已中文导读，官方MCP作业选用GitHub App用户OAuth，测试仓库为 [beginner2077/agent](https://github.com/beginner2077/agent)。当前学习内容已推送至 `main`，练习 Issue [#4](https://github.com/beginner2077/agent/issues/4)、[#5](https://github.com/beginner2077/agent/issues/5)、[#6](https://github.com/beginner2077/agent/issues/6) 已创建；[工具契约与练习入口](week2/README.md)已记录。下一步注册限权 GitHub App；尚未安装MCP依赖或开始服务编码。第一周视频/X原文、部分材料与正式writeup等缺口继续保留，不以局部检查代替整周验收。基础可简讲，新概念与前置不能跳过。
 
 已完成练习：[第一周 Part I：多文件修复与失败恢复](labs/week1_trace/README.md)。初始导入错误已修复，当前 6 项测试通过；代理轨迹保留了失败、两次 Edit 及再次验证的证据。
 

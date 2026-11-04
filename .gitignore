@@ -1,0 +1,17 @@
+.venv/
+.tools/
+.idea/
+course-assignments/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example
+*.flows
+*.har
+captures/
+traces/
+.claude/settings.local.json
+.mcp.json

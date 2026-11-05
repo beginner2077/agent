@@ -45,15 +45,15 @@ class TokenStore:
             raise auth_required("上次刷新结果无法安全使用，不能继续使用该旧令牌对。")
         return cached
 
-    def access_token(self) -> str:
-        """返回凭据给 API 客户端；调用方不得打印或将其放入工具结果。"""
+    def access_token(self, *, force_refresh: bool = False) -> str:
+        """默认按需刷新；force_refresh 供显式验证，返回的凭据不得打印。"""
         with self._lock:
             try:
                 # 文件锁也覆盖网络刷新，避免多个 Server 同时消费同一 refresh token。
                 with cache_lock(self.path):
                     cached = self._read()
                     now = time.time()
-                    if cached["expires_at"] > now + 60:
+                    if not force_refresh and cached["expires_at"] > now + 60:
                         return cached["access_token"]
                     if cached["refresh_expires_at"] <= now:
                         raise auth_required("刷新令牌已过期。")

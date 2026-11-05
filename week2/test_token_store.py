@@ -63,6 +63,22 @@ def test_valid_cache_never_requests_or_rewrites_tokens(cache, settings):
     assert cache.read_bytes() == before
 
 
+def test_explicit_refresh_does_not_need_cache_expiry_to_be_changed(cache, settings):
+    replace_cache(cache, expires_at=2000)
+    calls = []
+
+    def endpoint(request):
+        assert json.loads(cache.read_text())["expires_at"] == 2000
+        calls.append(request)
+        return fresh_response()
+
+    with httpx.Client(transport=httpx.MockTransport(endpoint)) as client:
+        store = storage.TokenStore(settings, cache, client)
+        assert store.access_token(force_refresh=True) == "new-fictional-access"
+        assert store.access_token() == "new-fictional-access"
+    assert len(calls) == 1
+
+
 @pytest.mark.parametrize("expires_at", [900, 1000, 1059, 1060])
 def test_refresh_rotates_both_tokens_once(cache, settings, expires_at):
     replace_cache(cache, expires_at=expires_at)

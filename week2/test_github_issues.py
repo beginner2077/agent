@@ -164,3 +164,64 @@ def test_configured_client_uses_real_token_store_cache_without_forcing_refresh(t
     finally:
         client.close()
     assert calls == ["GET"]
+
+
+def test_detail_uses_requested_number_and_bounds_body_without_extra_fields():
+    calls = []
+    body = "正文\n" * 1500
+
+    def endpoint(request):
+        calls.append(request)
+        assert request.method == "GET" and str(request.url) == api.ISSUES_URL + "/4"
+        assert request.headers["Authorization"] == "Bearer fictional-access"
+        return httpx.Response(200, json=issue(body=body))
+
+    with httpx.Client(transport=httpx.MockTransport(endpoint)) as http:
+        result = api.IssuesClient(Tokens(), http).get_issue(4)
+    detail = result["issue"]
+    assert result["repository"] == "beginner2077/agent"
+    assert detail["issue_number"] == 4 and detail["body"] == body[:4000]
+    assert detail["body_length"] == len(body) and detail["body_truncated"]
+    assert len(calls) == 1
+    public = json.dumps(result)
+    for excluded in ("fictional-access", "omitted-profile", "999999"):
+        assert excluded not in public
+
+
+@pytest.mark.parametrize("body", [None, "", "短正文\n保留换行", "x" * 4000])
+def test_empty_and_untruncated_bodies_are_preserved(body):
+    with httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=issue(body=body)))) as http:
+        detail = api.IssuesClient(Tokens(), http).get_issue(4)["issue"]
+    assert detail["body"] == (body or "")
+    assert detail["body_length"] == len(body or "") and not detail["body_truncated"]
+
+
+@pytest.mark.parametrize("number", [0, -1, True, "4", None])
+def test_detail_rejects_invalid_number_before_credentials_or_network(number):
+    tokens = Tokens()
+    with httpx.Client(transport=httpx.MockTransport(lambda request: pytest.fail("must not request"))) as http:
+        with pytest.raises(api.IssueError) as error:
+            api.IssuesClient(tokens, http).get_issue(number)
+    assert error.value.code == "invalid_arguments" and tokens.calls == 0
+
+
+@pytest.mark.parametrize("payload,code", [
+    ([issue()], "upstream_invalid"),
+    ({"pull_request": {}, "body": "private-pr-body"}, "not_an_issue"),
+    (issue(5), "upstream_invalid"),
+    (issue(body=[]), "upstream_invalid"),
+    ({key: value for key, value in issue().items() if key != "body"}, "upstream_invalid"),
+])
+def test_detail_rejects_pr_wrong_number_or_invalid_body(payload, code):
+    with httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))) as http:
+        with pytest.raises(api.IssueError) as error:
+            api.IssuesClient(Tokens(), http).get_issue(4)
+    assert error.value.code == code and "private-pr-body" not in str(error.value)
+
+
+def test_missing_detail_returns_safe_not_found_error():
+    with httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(404, text="private-response-body"))) as http:
+        with pytest.raises(api.IssueError) as error:
+            api.IssuesClient(Tokens(), http).get_issue(4)
+    assert error.value.code == "not_found_or_forbidden"
+    assert "private-response-body" not in str(error.value)

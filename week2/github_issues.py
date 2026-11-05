@@ -9,11 +9,30 @@ from .token_store import LOGIN_COMMAND, TokenStore
 MAX_PAGE = 100
 MAX_PAGE_SIZE = 10
 TITLE_LIMIT = 200
+BODY_LIMIT = 4000
 ISSUES_URL = f"https://api.github.com/repos/{REPOSITORY}/issues"
 
 
 class IssueError(OAuthError):
     """业务错误沿用安全的 code/message/retryable 结构。"""
+
+
+def read_json(response: httpx.Response):
+    try:
+        return response.json()
+    except ValueError:
+        raise IssueError("upstream_invalid", "GitHub 返回了无效 JSON。") from None
+
+
+def summarize_issue(row: dict) -> dict:
+    number = row.get("number")
+    if (type(number) is not int or number <= 0 or not isinstance(row.get("title"), str)
+            or row.get("state") not in ("open", "closed")
+            or row.get("html_url") != f"https://github.com/{REPOSITORY}/issues/{number}"):
+        raise IssueError("upstream_invalid", "GitHub Issue 字段或仓库来源不符合预期。")
+    return {"issue_number": number, "title": row["title"][:TITLE_LIMIT],
+            "title_truncated": len(row["title"]) > TITLE_LIMIT,
+            "state": row["state"], "url": row["html_url"]}
 
 
 class IssuesClient:
@@ -24,23 +43,16 @@ class IssuesClient:
     def close(self):
         self.client.close()
 
-    def list_issues(self, state="open", page=1, page_size=10) -> dict:
-        if (state not in ("open", "closed", "all")
-                or type(page) is not int or not 1 <= page <= MAX_PAGE
-                or type(page_size) is not int or not 1 <= page_size <= MAX_PAGE_SIZE):
-            raise IssueError("invalid_arguments", "请使用有效状态、1至100的页码和1至10的每页条数。")
+    def _get(self, url: str, params=None) -> httpx.Response:
         access_token = self.tokens.access_token()
         try:
-            response = self.client.get(ISSUES_URL, params={
-                "state": state, "page": page, "per_page": page_size,
-                "sort": "created", "direction": "desc",
-            }, headers={
+            response = self.client.get(url, params=params, headers={
                 "Authorization": "Bearer " + access_token,
                 "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2026-03-10",
             }, follow_redirects=False)
         except httpx.RequestError:
-            raise IssueError("github_unavailable", "GitHub 查询网络失败，本次没有取得列表，可稍后重试。", True) from None
+            raise IssueError("github_unavailable", "GitHub 查询网络失败，本次没有取得结果，可稍后重试。", True) from None
         status = response.status_code
         if status == 401:
             raise IssueError("auth_required", "GitHub 拒绝当前凭据，请独立重新登录：" + LOGIN_COMMAND)
@@ -50,13 +62,21 @@ class IssuesClient:
         if status == 403:
             raise IssueError("forbidden", "GitHub 拒绝读取，请检查权限、组织策略或限流信息。")
         if status == 404:
-            raise IssueError("not_found_or_forbidden", "测试仓库不存在或对当前授权不可见，请核对安装范围。")
+            raise IssueError("not_found_or_forbidden", "资源不存在或对当前授权不可见，请核对仓库、编号及安装范围。")
         if status != 200:
-            raise IssueError("github_http_error", f"GitHub 查询返回 HTTP {status}，未取得列表。", status >= 500)
-        try:
-            rows = response.json()
-        except ValueError:
-            raise IssueError("upstream_invalid", "GitHub 返回了无效 JSON。") from None
+            raise IssueError("github_http_error", f"GitHub 查询返回 HTTP {status}，未取得结果。", status >= 500)
+        return response
+
+    def list_issues(self, state="open", page=1, page_size=10) -> dict:
+        if (state not in ("open", "closed", "all")
+                or type(page) is not int or not 1 <= page <= MAX_PAGE
+                or type(page_size) is not int or not 1 <= page_size <= MAX_PAGE_SIZE):
+            raise IssueError("invalid_arguments", "请使用有效状态、1至100的页码和1至10的每页条数。")
+        response = self._get(ISSUES_URL, params={
+            "state": state, "page": page, "per_page": page_size,
+            "sort": "created", "direction": "desc",
+        })
+        rows = read_json(response)
         if not isinstance(rows, list) or len(rows) > page_size:
             raise IssueError("upstream_invalid", "GitHub 列表结构或条数不符合本次请求。")
         issues = []
@@ -65,17 +85,10 @@ class IssuesClient:
                 raise IssueError("upstream_invalid", "GitHub 列表包含无效记录。")
             if "pull_request" in row:
                 continue
-            number = row.get("number")
-            if (type(number) is not int or number <= 0 or not isinstance(row.get("title"), str)
-                    or row.get("state") not in ("open", "closed")
-                    or (state != "all" and row["state"] != state)
-                    or row.get("html_url") != f"https://github.com/{REPOSITORY}/issues/{number}"):
-                raise IssueError("upstream_invalid", "GitHub Issue 字段或仓库来源不符合预期。")
-            issues.append({
-                "issue_number": number, "title": row["title"][:TITLE_LIMIT],
-                "title_truncated": len(row["title"]) > TITLE_LIMIT,
-                "state": row["state"], "url": row["html_url"],
-            })
+            item = summarize_issue(row)
+            if state != "all" and item["state"] != state:
+                raise IssueError("upstream_invalid", "GitHub Issue 状态不符合本次筛选。")
+            issues.append(item)
         # 不直接跟随上游提供的 URL；下一次仍请求代码中固定的端点。
         has_next = "next" in response.links
         return {"repository": REPOSITORY, "issues": issues, "pagination": {
@@ -84,6 +97,24 @@ class IssuesClient:
             "next_page": page + 1 if has_next and page < MAX_PAGE else None,
             "page_limit_reached": has_next and page == MAX_PAGE,
         }}
+
+    def get_issue(self, issue_number: int) -> dict:
+        if type(issue_number) is not int or issue_number <= 0:
+            raise IssueError("invalid_arguments", "issue_number 必须是正整数。")
+        row = read_json(self._get(f"{ISSUES_URL}/{issue_number}"))
+        if not isinstance(row, dict):
+            raise IssueError("upstream_invalid", "GitHub 详情不是有效对象。")
+        if "pull_request" in row:
+            raise IssueError("not_an_issue", "该编号属于PR，本工具只读取Issue。")
+        item = summarize_issue(row)
+        if item["issue_number"] != issue_number:
+            raise IssueError("upstream_invalid", "GitHub 返回的编号与请求不符。")
+        if "body" not in row or (row["body"] is not None and not isinstance(row["body"], str)):
+            raise IssueError("upstream_invalid", "GitHub 正文结构不符合预期。")
+        body = row["body"] or ""
+        item.update({"body": body[:BODY_LIMIT], "body_length": len(body),
+                     "body_truncated": len(body) > BODY_LIMIT})
+        return {"repository": REPOSITORY, "issue": item}
 
 
 def configured_client() -> IssuesClient:

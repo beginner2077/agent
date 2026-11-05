@@ -20,7 +20,7 @@ def test_list_and_call_over_stdio():
             assert client.protocol_version is not None
             # 发现工具和执行工具是两次不同的 MCP 请求。
             tools = await client.list_tools()
-            assert {tool.name for tool in tools} == {"ping", "list_issues"}
+            assert {tool.name for tool in tools} == {"ping", "list_issues", "get_issue"}
             result = await client.call_tool("ping", {})
             assert result.data == {"status": "ok", "scope": "local_mcp"}
             print("protocol:", client.protocol_version)
@@ -41,6 +41,8 @@ class Tokens:
         return "fictional-access"
 def endpoint(request):
     assert request.method == "GET" and request.url.host == "api.github.com"
+    if request.url.path.endswith("/issues/4"):
+        return httpx.Response(200, json={"number": 4, "title": "fixture", "state": "open", "body": "fixture body", "html_url": "https://github.com/beginner2077/agent/issues/4"})
     return httpx.Response(200, json=[
         {"pull_request": {}},
         {"number": 4, "title": "fixture", "state": "open", "html_url": "https://github.com/beginner2077/agent/issues/4"}
@@ -58,5 +60,10 @@ create_server(IssuesClient(Tokens(), httpx.Client(transport=httpx.MockTransport(
             assert result.data["pagination"]["next_page"] == 2
             assert result.data["pagination"]["upstream_count"] == 2
             assert result.data["pagination"]["returned_count"] == 1
+            selected = result.data["issues"][0]["issue_number"]
+            detail = await client.call_tool("get_issue", {"issue_number": selected})
+            assert not detail.is_error
+            assert detail.data["issue"]["issue_number"] == selected
+            assert detail.data["issue"]["body"] == "fixture body"
 
     asyncio.run(exercise())

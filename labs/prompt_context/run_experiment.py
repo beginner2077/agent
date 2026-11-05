@@ -124,6 +124,27 @@ def summarize(records: list[dict]) -> dict:
     return summary
 
 
+def request_model(client: OpenAI, request: dict) -> dict:
+    """执行一次请求，保留可核对结果；异常只记录类型及状态码。"""
+    result = {"request": request, "error": None, "output_text": None, "response_meta": None}
+    try:
+        response = client.responses.create(**request)
+        reported = response.model_dump(mode="json")
+        result["response_meta"] = {key: reported.get(key) for key in (
+            "id", "model", "status", "reasoning", "temperature", "top_p",
+            "max_output_tokens", "usage", "incomplete_details",
+        )}
+        result["output_text"] = response.output_text
+        unexpected = any(item.get("type") not in ("message", "reasoning")
+                         for item in reported.get("output", []))
+        if response.status != "completed" or unexpected:
+            result["error"] = {"type": "response_not_completed_or_unexpected_tool_call"}
+    except APIError as error:
+        # SDK 异常正文可能含服务响应，不能直接输出其 str。
+        result["error"] = {"type": type(error).__name__, "http_status": getattr(error, "status_code", None)}
+    return result
+
+
 def run_trials(client: OpenAI, directory: Path) -> tuple[dict, bool]:
     directory.mkdir(parents=True, exist_ok=False)
     records = []
@@ -133,26 +154,9 @@ def run_trials(client: OpenAI, directory: Path) -> tuple[dict, bool]:
         for trial in range(1, REPEATS + 1):
             for group, (_, has_document) in GROUPS.items():
                 request = make_request(group)
-                row = {"group": group, "trial": trial, "request": request,
-                       "error": None, "output_text": None, "response_meta": None, "score": None}
-                try:
-                    response = client.responses.create(**request)
-                    reported = response.model_dump(mode="json")
-                    row["response_meta"] = {key: reported.get(key) for key in (
-                        "id", "model", "status", "reasoning", "temperature", "top_p",
-                        "max_output_tokens", "usage", "incomplete_details",
-                    )}
-                    row["output_text"] = response.output_text
-                    unexpected = any(item.get("type") in (
-                        "function_call", "custom_tool_call", "web_search_call", "tool_search_call",
-                    ) for item in reported.get("output", []))
-                    if response.status != "completed" or unexpected:
-                        row["error"] = {"type": "response_not_completed_or_unexpected_tool_call"}
-                    else:
-                        row["score"] = score_output(response.output_text, has_document)
-                except APIError as error:
-                    # SDK 异常正文可能含服务响应，记录类型与状态码即可，不输出其 str。
-                    row["error"] = {"type": type(error).__name__, "http_status": getattr(error, "status_code", None)}
+                row = {"group": group, "trial": trial, **request_model(client, request), "score": None}
+                if row["error"] is None:
+                    row["score"] = score_output(row["output_text"], has_document)
                 records.append(row)
                 stream.write(json.dumps(row, ensure_ascii=False) + "\n")
                 stream.flush()

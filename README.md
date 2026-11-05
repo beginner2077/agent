@@ -4,7 +4,7 @@
 
 从课程开始独立学习，不引用其他业务项目的 docs、AGENTS 或 Skill 模板。练习代码放在本项目中，保留已有 PyCharm `main.py`。
 
-**当前练习（2026-11-05）：** [指令、示例与外部资料四组对照](labs/prompt_context/README.md)已完成12次真实请求并核对原始结果：A/B 合规返回未知，C/D 三次均完成方案，未观察到示例的额外收益；当前补讲关键词、语义与混合检索，尚未实现自动检索。运行器15项离线测试已通过。用户最新授权：新增代码自动加入 Git，完成有意义的阶段并验证后自主 commit 和 push 到本仓库；凭据和运行记录按忽略规则保留在版本管理之外。
+**当前练习（2026-11-05）：** [指令、示例与外部资料四组对照](labs/prompt_context/README.md)已完成12次真实请求；[最小本地检索练习](labs/retrieval/README.md)现已实现关键词匹配、版本过滤、关联补全与模型输入预览，新增10项离线测试通过，生成阶段尚未调用模型。用户最新授权：新增代码自动加入 Git；完整练习、专题或独立修复验证后，再自主 commit 和 push，提交说明使用中文，不按每轮问答提交。凭据和原始运行记录继续忽略；已推送历史保留。
 
 **当前进度以 [学习交接](LEARNING_HANDOFF.md) 和 [第一周覆盖清单](WEEK1_LEARNING_CHECKLIST.md) 为准。** 已选择 Claude Code + DeepSeek。第二周课堂文字稿及指定阅读核心已中文导读，官方MCP作业选用GitHub App用户OAuth，测试仓库为 [beginner2077/agent](https://github.com/beginner2077/agent)。初始学习内容已推送至 `main`，练习 Issue [#4](https://github.com/beginner2077/agent/issues/4)、[#5](https://github.com/beginner2077/agent/issues/5)、[#6](https://github.com/beginner2077/agent/issues/6) 已创建；[工具契约与练习入口](week2/README.md)已记录。GitHub App 已注册，仅安装到 `agent`（已通过 API 核对）；仓库外本机配置已保存，状态检查通过；独立 MCP 环境及最小 stdio 协议测试已通过；OAuth 首次真实登录已成功，缓存及安装范围已只读核对；按需静默刷新逻辑及失败分支已实现，第二周47项测试通过，真实刷新待验证；GitHub业务工具尚未实现。第一周视频/X原文、部分材料与正式writeup等缺口继续保留，不以局部检查代替整周验收。基础可简讲，新概念与前置不能跳过。
 

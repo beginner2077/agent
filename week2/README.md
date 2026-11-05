@@ -1,10 +1,12 @@
 # 第二周实操：GitHub Issues MCP Server
 
+教学推进说明（2026-11-04）：学习者已确认主线为 Fall 2026。本目录实操断点保留；先按 [覆盖核对](../COURSE_COVERAGE_AUDIT.md) 紧凑补必要基础，再继续真实刷新和业务工具。以下“下一小步”是恢复实操时的断点，不代表另换旧版课程。
+
 依据：[官方第二周作业](../course-assignments/week2/assignment.md)。本目录是当前学习项目的实现位置，不修改官方仓库副本，不代填正式 writeup。用户已授权将当前学习内容提交到下述仓库，并创建练习 Issue。
 
 ## 当前状态
 
-测试仓库已指定为 [beginner2077/agent](https://github.com/beginner2077/agent)。目前只有工具契约与分步实施草案；GitHub App 尚未注册，FastMCP/MCP 依赖未安装，服务与 OAuth 代码尚未实现。以下是计划行为，不是已经运行通过的功能。
+测试仓库为 [beginner2077/agent](https://github.com/beginner2077/agent)。GitHub App 所有者 `beginner2077`，App ID `5608184`，Client ID `Iv23liKKXW1SNhxqjN1I`（均为应用标识，不是密钥）。首次真实 OAuth 登录已完成，缓存、账号、安装范围与权限已只读核对。独立 MCP 环境及本地 stdio 测试已通过。按需静默刷新逻辑已实现并通过离线测试，尚未真实刷新或接入 MCP 业务工具；以下业务工具契约仍为计划行为。
 
 当前发布使用 Git 的独立登录，不代表第二周 MCP 的 GitHub App OAuth 已完成。提交作者仅在本仓库设置为 `beginner2077 <97858703+beginner2077@users.noreply.github.com>`，不更改全局 Git 身份。
 
@@ -40,23 +42,93 @@
 
 ## OAuth 和权限
 
+注册配置指导（2026-11-04）：App 名称为 `beginner2077-cs146s-mcp`（用户授权页已确认），Homepage 使用本仓库 URL；回调地址为 `http://127.0.0.1:8765/callback`，不启用通配匹配。用户实际页面在 Identifying and authorizing users 分组中称此字段为 Redirect URI，官方文档称 Callback URL，二者在此指同一用途。当前独立登录入口按同一地址启动回调监听。指导保留用户令牌过期，不开启安装时自动 OAuth 或 Device Flow；关闭 Webhook Active，Setup URL 留空。已收到注册成功及仅安装 agent 的确认，尚未逐项核实实际配置；注册、安装和 OAuth 授权是分别完成的步骤。
+
 使用 GitHub App 的用户授权码流程及可过期用户访问令牌，以覆盖授权码交换、缓存和刷新。使用 `state` 校验与 PKCE S256；回调地址需要与 App 注册配置匹配。
 
 App 安装仅选择上述测试仓库。计划权限为 Repository `Issues: Read and write`，以及 GitHub App 必需的 Metadata 读取权限；不额外申请 Contents、Pull requests 或管理权限。写操作是本练习申请 Issues 写权限的原因。
 
 GitHub App 使用注册时配置的细粒度权限，不沿用传统 OAuth App 的 `repo` scope；用户令牌同时受用户自身权限和 App 权限约束。
 
-首次登录由独立的本机授权入口完成。Server 使用缓存令牌，必要时刷新并保存刷新结果；授权失效且无法刷新时返回 `auth_required` 等可操作错误，不在工具调用中打开浏览器。
+首次登录由独立的本机授权入口完成。后续 Server 将通过 `TokenStore.access_token()` 读取缓存，必要时刷新；刷新逻辑已实现，Server 接入尚未完成。授权失效且无法安全刷新时返回 `auth_required` 等可操作错误，不在工具调用中打开浏览器。
 
 Client Secret、访问令牌与刷新令牌只在本机配置或缓存中管理，不写进示例配置、模型提示或日志。缓存位置、忽略规则和权限保护在实现前明确。
 
+### 本机配置准备
+
+2026-11-04 已创建 `%LOCALAPPDATA%\CS146S\github-mcp\.env`：填写了上述 Client ID、回调地址和固定仓库，`GITHUB_CLIENT_SECRET` 初始留空。目录已关闭 ACL 继承，仅为当前 Windows 用户保留完全控制权限，并核对文件继承后的 ACL；位于 Git 工作区之外。仓库中的 [.env.example](.env.example) 不含密钥，真实 `.env` 也受忽略规则保护。
+
+学习者在 GitHub App 设置的 Client secrets 区域生成 Client Secret，然后仅在本机编辑上述文件的 `GITHUB_CLIENT_SECRET=` 一行；无需发送给助教。可在 PowerShell 运行：
+
+```powershell
+notepad "$env:LOCALAPPDATA\CS146S\github-mcp\.env"
+```
+
+学习者回复“已保存”后的首次只读检查结果：配置文件存在、Client Secret 非空、Client ID/回调/仓库匹配、目录 ACL 符合预期；该次检查没有打印配置值或发出 OAuth 请求；后续真实登录证据见下文。[oauth_login.py](oauth_login.py) 显式读取此文件，若进程已设置相应 `GITHUB_` 环境变量，则环境变量优先；不自动搜索其他项目配置，不修改 Claude 命名配置或全局环境变量。令牌缓存位置为同一受限目录的 `tokens.json`，现已由首次真实登录创建。不得通过打印配置或缓存内容来验证；检查时只返回必要的状态信息，不输出凭据。
+
+## 本地 MCP 最小验证
+
+这是在业务工具与 OAuth 之前的自拟前置检查，不代表官方第二周作业已验收。仅提供 `ping` 工具，返回 `status=ok, scope=local_mcp`，不读取凭据、不访问 GitHub、不调用模型。
+
+本轮使用独立的 `week2/.venv`，保留第一周根目录 `.venv` 的依赖。直接依赖版本见 [requirements.txt](requirements.txt)：FastMCP 4.1.6、MCP SDK 2.3.0；版本已从 PyPI 元数据核对。重建与检查命令均从项目根目录执行：
+
+```powershell
+.\.venv\Scripts\python.exe -m venv week2/.venv
+.\week2\.venv\Scripts\python.exe -m pip install -r week2/requirements.txt
+.\week2\.venv\Scripts\python.exe -m pytest week2/test_mcp_stdio.py -q -s
+```
+
+[server.py](server.py) 用 `@mcp.tool(...)` 注册工具，用 `mcp.run(transport="stdio")` 处理协议消息；`show_banner=False` 仅隐藏启动横幅。单独启动命令为 `.\week2\.venv\Scripts\python.exe week2/server.py`，此时服务等待 MCP 请求，不是自然语言输入框。
+
+[test_mcp_stdio.py](test_mcp_stdio.py) 通过 `StdioTransport` 启动真实服务器子进程，先 `tools/list` 再 `tools/call`，检验工具名及返回内容。`ping` 是自定义工具名，请求方法仍为 `tools/call`；这里没有调用 Client 的协议级 `ping()`。测试打印的版本/工具名/结果是读取返回对象后的摘要，不是原始协议报文。SDK 自动选择协议版本，测试输出实际协商值，不预先假定旧版 `initialize` 流程。
+
+2026-11-04 验证结果：上述 pytest 命令返回 `1 passed in 1.60s`；实际协商协议为 `2026-07-28`，`tools/list` 返回 `['ping']`，`tools/call` 结果为 `{'status': 'ok', 'scope': 'local_mcp'}`。独立环境 `python -m pip check` 返回 `No broken requirements found.`。此项测试只覆盖测试客户端到本地 Server 的协议链路；GitHub 授权、业务工具和 Claude Code 集成需要各自的验证证据。
+
+## 独立 OAuth 首次登录
+
+从项目根目录执行：
+
+```powershell
+.\week2\.venv\Scripts\python.exe week2/oauth_login.py
+```
+
+程序先绑定 `127.0.0.1:8765`，打印授权链接；学习者手动在浏览器打开，使用 beginner2077 在五分钟内完成授权。浏览器回到本机后，程序校验 `state`，用 `code + client_secret + code_verifier` 请求固定的 GitHub 令牌端点，再只读调用 `/user` 核对账号，最后原子保存令牌。链接中只含 PKCE S256 挑战值，不含 verifier 或 Client Secret；`offline_access` 请求可过期令牌及刷新令牌，不用于授予仓库业务权限。
+
+`state` 把回调与本次登录请求关联，PKCE 把授权码与本次程序持有的 verifier 关联。回调页面只报告“已收到回调”；终端 `3/3 登录成功` 才表示换取令牌、核对账号和本机保存均已完成。
+
+HTTP 回调日志不会记录带 code 的 URL；错误不输出远端响应正文或凭据。缓存及临时文件均位于受限目录，Windows ACL 仅授权当前用户；保存失败保留旧文件。授权码交换失败不会自动重试同一码，网络结果不确定时重新运行登录入口。账号不匹配时不保存新令牌。初次登录负责获得和保存令牌，按需刷新由下节 `TokenStore` 负责。
+
+离线验证命令：`.\week2\.venv\Scripts\python.exe -m pytest week2 -q`。2026-11-04 返回 **23 passed in 1.62s**（22 项 OAuth 用例及 1 项 stdio 测试），`pip check` 通过。测试使用 RFC 7636 PKCE 向量、虚构配置、MockTransport、临时缓存及本机临时端口；这些测试没有调用真实 GitHub 授权或令牌端点。
+
+真实验证（2026-11-04 09:07 UTC）：学习者已运行登录命令并反馈 `3/3 登录成功`。只读核对真实 `tokens.json`：访问/刷新令牌均非空且当时未过期，Client ID/仓库匹配，缓存 ACL 仅当前用户。随后仅使用 GET `/user`、`/user/installations`、`/user/installations/178480617/repositories`，确认账号 beginner2077、App ID 5608184、安装 ID 178480617、`repository_selection=selected`、关联仓库仅 beginner2077/agent，权限为 `issues=write` 和 `metadata=read`，安装未暂停。这是当前首次登录与安装范围的真实证据；没有写入 GitHub、刷新令牌或验证 MCP 业务工具。关联仓库清单不等于断言其他公共数据都不可读取。
+
+## 按需静默刷新
+
+学习者对“远端刷新成功但本地保存失败后，能否把旧缓存当作有效凭据”的回答“不能”达标。GitHub 的旧令牌对已经失效；原子写入仅保护文件完整性，无法回滚远端轮换。
+
+[token_store.py](token_store.py) 的 `TokenStore.access_token()` 供后续业务 API 客户端调用，不是后台定时任务，也不会打开浏览器。读取时核对应用、仓库、令牌结构与过期时间；剩余有效期大于 60 秒时复用访问令牌，临近过期时用刷新令牌换新令牌对，原子保存后才返回新访问令牌。
+
+| 分支 | 行为 |
+| --- | --- |
+| 刷新令牌过期、授权被拒绝、响应缺失或内容不完整 | `auth_required`，提示独立登录命令 |
+| 连接未建立或 HTTP 429 | 标记 `retryable=True`，由调用方稍后重试，本函数不自动循环 |
+| 应用凭据错误 | `client_config_invalid`，提示修正本机配置并重启 |
+| 远端成功但本机保存失败 | `token_cache_write_failed`，不回退旧凭据；当前实例拒绝继续使用该旧刷新令牌 |
+| 同一缓存被其他实例更新 | `token_busy`，可稍后重试 |
+
+读缓存、刷新和保存处于同一个 OS 文件锁内，同一实例另有线程锁。首次登录保存也使用同一锁文件。重新登录写入不同令牌后，当前实例可读取新缓存恢复。过期时间只是本机判断，无法证明令牌没有被远端撤销；后续 API 客户端仍需处理实际 401。
+
+首次兑换和刷新共用 `oauth_login.tokens_from_payload()` 校验，`OAuthError` 新增 `retryable` 状态。本轮 `.\week2\.venv\Scripts\python.exe -m pytest week2 -q` 返回 **47 passed in 1.87s**（此前 23 项 + 24 项刷新用例），涵盖轮换两个令牌、临界过期、缓存损坏、失败重试策略、远端成功后写入失败、重新登录恢复及两个实例争用锁。所有刷新请求均使用 MockTransport 和虚构令牌，未访问真实刷新端点。
+
+另用禁止联网的客户端检查了真实缓存复用：返回现有访问令牌，网络请求为 0，`tokens.json` 字节未改变。只证明当时正常复用，尚未验证真实刷新、实际 API 401 处理或 MCP 业务工具集成。下一小步先完成一次真实刷新验证，再实现首个 GitHub 工具。
+
 ## 小步实施与验收
 
-1、测试仓库、当前内容发布与练习 Issue 创建已完成；下一步注册并限权安装 GitHub App。
+1、测试仓库、初始发布、练习 Issue、App 注册和首次真实 OAuth 登录已完成；安装范围与 Issues/Metadata 权限已通过该 App 用户令牌只读核对。
 
-2、选定、安装并记录 FastMCP/SDK 版本；用最小 stdio 例子核对实际协议支持，保持课堂脚本的 DeepSeek 配置。
+2、已在独立环境安装固定版本 FastMCP/SDK，最小 stdio 协议测试通过，记录了实际版本；课堂脚本的 DeepSeek 配置未改。
 
-3、实现独立 OAuth 登录、缓存与刷新；用模拟端点验证交换/刷新/失效分支，再验证真实授权。
+3、独立 OAuth 首次登录与缓存已真实验证；静默刷新及失败分支已实现并通过离线测试，下一步验证一次真实刷新。
 
 4、逐个实现工具。通过 MCP Client 调用 `tools/list` 和 `tools/call`，验证 schema、输出裁剪、PR 排除、预览零写入及结构化错误。
 

@@ -17,18 +17,18 @@ class Tokens:
         return "fictional-access"
 
 
-def make_server(status=200, calls=None, detail_status=200):
+def make_server(status=200, calls=None, detail_status=200, number=4, current_state="open"):
     def endpoint(request):
         assert request.method == "GET"
         url = str(request.url).split("?")[0]
-        assert url in (api.ISSUES_URL, api.ISSUES_URL + "/4")
+        assert url in (api.ISSUES_URL, api.ISSUES_URL + f"/{number}")
         if calls is not None:
             calls.append(url)
         if status != 200:
             return httpx.Response(status, text="private-response-body")
-        row = {"number": 4, "id": 999999, "title": "练习Issue", "state": "open",
-               "html_url": "https://github.com/beginner2077/agent/issues/4", "body": "详情正文"}
-        if url.endswith("/4"):
+        row = {"number": number, "id": 999999, "title": "练习Issue", "state": current_state,
+               "html_url": f"https://github.com/beginner2077/agent/issues/{number}", "body": "详情正文"}
+        if url.endswith(f"/{number}"):
             return httpx.Response(200, json=row) if detail_status == 200 else httpx.Response(detail_status, text="private-response-body")
         return httpx.Response(200, json=[row])
 
@@ -53,6 +53,10 @@ def test_schema_validation_and_ping_do_not_load_credentials(monkeypatch):
             assert tools["list_issues"].annotations.read_only_hint
             assert set(tools["get_issue"].input_schema["properties"]) == {"issue_number"}
             assert tools["get_issue"].annotations.read_only_hint
+            preview_schema = tools["set_issue_state"].input_schema["properties"]
+            assert preview_schema["dry_run"]["const"] is True and preview_schema["dry_run"]["default"] is True
+            assert preview_schema["issue_number"]["const"] == 5
+            assert tools["set_issue_state"].annotations.read_only_hint
             assert (await client.call_tool("ping", {})).data["status"] == "ok"
             for args in ({"page": 0}, {"page": "1"}, {"page": True}, {"page_size": 11},
                          {"state": "invalid"}, {"repository": "other/repo"}):
@@ -61,6 +65,13 @@ def test_schema_validation_and_ping_do_not_load_credentials(monkeypatch):
             for args in ({"issue_number": 0}, {"issue_number": True}, {"issue_number": "4"},
                          {"issue_number": 4, "repository": "other/repo"}):
                 assert (await client.call_tool("get_issue", args, raise_on_error=False)).is_error
+            for args in ({"issue_number": 4, "state": "closed"}, {"issue_number": "5", "state": "closed"},
+                         {"issue_number": 5.0, "state": "closed"},
+                         {"issue_number": 5, "state": "all"},
+                         {"issue_number": 5, "state": "closed", "dry_run": False},
+                         {"issue_number": 5, "state": "closed", "dry_run": 1}):
+                assert (await client.call_tool("set_issue_state", args, raise_on_error=False)).is_error
+                assert calls == [], f"invalid preview arguments reached credential loading: {args}"
 
     asyncio.run(exercise())
     assert calls == []
@@ -168,3 +179,26 @@ def test_detail_verifier_does_not_report_success_after_detail_error(monkeypatch,
     assert calls == [api.ISSUES_URL, api.ISSUES_URL + "/4"]
     assert "not_found_or_forbidden" in printed.out
     assert "串联成功" not in printed.out and "private-response-body" not in printed.out + printed.err
+
+
+def test_preview_verifier_chains_three_tools_and_only_uses_get(monkeypatch, capsys):
+    for current_state in ("open", "closed"):
+        calls = []
+        monkeypatch.setattr(sys, "argv", ["verify_issues", "--read", "--detail", "5", "--preview-state", "closed"])
+        monkeypatch.setattr(check, "StdioTransport", lambda **kwargs: make_server(calls=calls, number=5, current_state=current_state))
+        assert check.main() == 0
+        assert calls == [api.ISSUES_URL, api.ISSUES_URL + "/5", api.ISSUES_URL + "/5"]
+        printed = capsys.readouterr()
+        assert "5/5 列表→详情→默认预览串联成功" in printed.out
+        assert '"dry_run": true' in printed.out and '"applied": false' in printed.out
+        assert "fictional-access" not in printed.out + printed.err
+
+
+def test_verifier_rejects_preview_result_claiming_applied(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["verify_issues", "--read", "--detail", "5", "--preview-state", "closed"])
+    monkeypatch.setattr(check, "StdioTransport", lambda **kwargs: make_server(number=5))
+    monkeypatch.setattr(api.IssuesClient, "set_issue_state", lambda *args, **kwargs: {"dry_run": True, "applied": True})
+    assert check.main() == 1
+    printed = capsys.readouterr()
+    assert "不能视为未写入" in printed.out
+    assert "默认预览串联成功" not in printed.out

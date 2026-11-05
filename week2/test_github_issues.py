@@ -225,3 +225,56 @@ def test_missing_detail_returns_safe_not_found_error():
             api.IssuesClient(Tokens(), http).get_issue(4)
     assert error.value.code == "not_found_or_forbidden"
     assert "private-response-body" not in str(error.value)
+
+
+@pytest.mark.parametrize("current_state", ["open", "closed"])
+def test_default_state_preview_only_reads_and_builds_plan_if_needed(current_state):
+    calls = []
+
+    def endpoint(request):
+        calls.append(request.method)
+        assert request.method == "GET" and str(request.url) == api.ISSUES_URL + "/5"
+        return httpx.Response(200, json=issue(5, state=current_state, body="preview-private-body"))
+
+    with httpx.Client(transport=httpx.MockTransport(endpoint)) as http:
+        result = api.IssuesClient(Tokens(), http).set_issue_state(5, "closed")
+    assert calls == ["GET"]
+    assert result["dry_run"] is True and result["applied"] is False
+    assert result["current_state"] == current_state and result["target_state"] == "closed"
+    assert result["would_change"] == (current_state != "closed")
+    assert result["planned_request"] == ({"method": "PATCH", "url": api.ISSUES_URL + "/5",
+                                          "json": {"state": "closed"}} if current_state != "closed" else None)
+    assert "fictional-access" not in json.dumps(result) and "preview-private-body" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("arguments,code", [
+    ({"issue_number": 4, "state": "closed"}, "target_not_allowed"),
+    ({"issue_number": "5", "state": "closed"}, "invalid_arguments"),
+    ({"issue_number": 5.0, "state": "closed"}, "invalid_arguments"),
+    ({"issue_number": True, "state": "closed"}, "invalid_arguments"),
+    ({"issue_number": 0, "state": "closed"}, "invalid_arguments"),
+    ({"issue_number": 5, "state": "all"}, "invalid_arguments"),
+    ({"issue_number": 5, "state": "closed", "dry_run": "true"}, "invalid_arguments"),
+    ({"issue_number": 5, "state": "closed", "dry_run": 1}, "invalid_arguments"),
+    ({"issue_number": 5, "state": "closed", "dry_run": False}, "write_not_enabled"),
+])
+def test_state_preview_blocks_other_targets_invalid_values_and_actual_writes(arguments, code):
+    tokens = Tokens()
+    with httpx.Client(transport=httpx.MockTransport(lambda request: pytest.fail("must not request"))) as http:
+        with pytest.raises(api.IssueError) as error:
+            api.IssuesClient(tokens, http).set_issue_state(**arguments)
+    assert error.value.code == code and tokens.calls == 0
+
+
+def test_state_preview_rejects_pr_without_a_write_request():
+    calls = []
+
+    def endpoint(request):
+        calls.append(request.method)
+        assert request.method == "GET"
+        return httpx.Response(200, json={"pull_request": {}, "body": "private-pr-body"})
+
+    with httpx.Client(transport=httpx.MockTransport(endpoint)) as http:
+        with pytest.raises(api.IssueError) as error:
+            api.IssuesClient(Tokens(), http).set_issue_state(5, "closed")
+    assert error.value.code == "not_an_issue" and calls == ["GET"]

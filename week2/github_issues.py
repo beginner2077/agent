@@ -10,6 +10,7 @@ MAX_PAGE = 100
 MAX_PAGE_SIZE = 10
 TITLE_LIMIT = 200
 BODY_LIMIT = 4000
+STATE_CHANGE_ISSUE = 5
 ISSUES_URL = f"https://api.github.com/repos/{REPOSITORY}/issues"
 
 
@@ -115,6 +116,26 @@ class IssuesClient:
         item.update({"body": body[:BODY_LIMIT], "body_length": len(body),
                      "body_truncated": len(body) > BODY_LIMIT})
         return {"repository": REPOSITORY, "issue": item}
+
+    def set_issue_state(self, issue_number: int, state: str, dry_run: bool = True) -> dict:
+        if (type(issue_number) is not int or issue_number <= 0
+                or state not in ("open", "closed") or type(dry_run) is not bool):
+            raise IssueError("invalid_arguments", "请使用正整数编号、open/closed状态和布尔dry_run。")
+        if issue_number != STATE_CHANGE_ISSUE:
+            raise IssueError("target_not_allowed", "状态预览仅限专用测试Issue #5。")
+        if not dry_run:
+            raise IssueError("write_not_enabled", "当前阶段仅开放预览，真实写入尚未开放。")
+        current = self.get_issue(issue_number)["issue"]
+        would_change = current["state"] != state
+        return {
+            "repository": REPOSITORY, "issue_number": issue_number,
+            "title": current["title"], "title_truncated": current["title_truncated"], "url": current["url"],
+            "current_state": current["state"], "target_state": state,
+            "dry_run": True, "would_change": would_change, "applied": False,
+            # 这是计划数据，当前版本没有任何执行此PATCH的代码路径。
+            "planned_request": {"method": "PATCH", "url": f"{ISSUES_URL}/{issue_number}",
+                                "json": {"state": state}} if would_change else None,
+        }
 
 
 def configured_client() -> IssuesClient:

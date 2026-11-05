@@ -1,12 +1,12 @@
 # 第二周实操：GitHub Issues MCP Server
 
-教学推进说明（2026-11-04）：学习者已确认主线为 Fall 2026。本目录实操断点保留；先按 [覆盖核对](../COURSE_COVERAGE_AUDIT.md) 紧凑补必要基础，再继续真实刷新和业务工具。以下“下一小步”是恢复实操时的断点，不代表另换旧版课程。
+教学推进说明（2026-11-05）：主线为 Fall 2026，模型/提示/上下文的补充已作阶段归纳，现已回本目录实操。学习者已完成真实刷新并反馈账号核对通过。首个 list_issues 工具已实现，函数与 MCP 调用的离线检查通过；真实 GitHub 数据读取待学习者运行验证。
 
 依据：[官方第二周作业](../course-assignments/week2/assignment.md)。本目录是当前学习项目的实现位置，不修改官方仓库副本，不代填正式 writeup。用户已授权将当前学习内容提交到下述仓库，并创建练习 Issue。
 
 ## 当前状态
 
-测试仓库为 [beginner2077/agent](https://github.com/beginner2077/agent)。GitHub App 所有者 `beginner2077`，App ID `5608184`，Client ID `Iv23liKKXW1SNhxqjN1I`（均为应用标识，不是密钥）。首次真实 OAuth 登录已完成，缓存、账号、安装范围与权限已只读核对。独立 MCP 环境及本地 stdio 测试已通过。按需静默刷新逻辑已实现并通过离线测试，尚未真实刷新或接入 MCP 业务工具；以下业务工具契约仍为计划行为。
+测试仓库为 [beginner2077/agent](https://github.com/beginner2077/agent)。GitHub App 所有者 `beginner2077`，App ID `5608184`，Client ID `Iv23liKKXW1SNhxqjN1I`（均为应用标识，不是密钥）。首次真实 OAuth 登录、安装范围与权限核对保留，真实刷新及账号核对已有学习者3/3成功输出。当前 Server 提供 ping、list_issues；第二周89项离线检查通过，含真实 stdio 通道对模拟上游的列表调用，尚未通过该工具读取真实 GitHub 数据。get_issue 和 set_issue_state 未实现。
 
 当前发布使用 Git 的独立登录，不代表第二周 MCP 的 GitHub App OAuth 已完成。提交作者仅在本仓库设置为 `beginner2077 <97858703+beginner2077@users.noreply.github.com>`，不更改全局 Git 身份。
 
@@ -26,19 +26,45 @@
 
 仓库通过本机配置固定为 `owner/repo`，工具参数不暴露任意仓库选择。不读取或修改其他项目的代码、提交、PR、评论、标签或设置。GitHub 的 Issues 列表可能含 PR，列表需排除 PR，详情与写操作也需拒绝 PR 对象。
 
-## 三个组合工具的契约草案
+## 三个组合工具的契约与状态
 
 | 工具 | 输入 | 输出与串联 | 操作性质 |
 | --- | --- | --- | --- |
-| `list_issues` | `state` 为 `open/closed/all`，有界分页参数 | 精简列表：`issue_number/title/state/url` 及分页信息 | 只读 |
-| `get_issue` | `issue_number`，取自列表的同名字段，必须为正整数 | 精简详情：编号、标题、正文、状态、URL；正文限长时明确标记 | 只读 |
-| `set_issue_state` | 同一 `issue_number`，`state` 为 `open/closed`，`dry_run=True` | 默认返回当前状态、目标状态和计划请求；关闭预览时才更新并报告实际结果 | 可写 |
+| `list_issues`（已实现） | `state` 为 `open/closed/all`，page=1至100，page_size=1至10，默认open/1/10 | 精简列表：`issue_number/title/title_truncated/state/url` 及分页信息 | 只读 |
+| `get_issue`（待实现） | `issue_number`，取自列表的同名字段，必须为正整数 | 精简详情：编号、标题、正文、状态、URL；正文限长时明确标记 | 只读 |
+| `set_issue_state`（待实现） | 同一 `issue_number`，`state` 为 `open/closed`，`dry_run=True` | 默认返回当前状态、目标状态和计划请求；关闭预览时才更新并报告实际结果 | 可写 |
 
 `issue_number` 对应 GitHub 返回的 `number`，不是全局 `id`，也不是 MCP 请求的 JSON-RPC ID。
 
 计划串联：`list_issues → get_issue → set_issue_state(dry_run=True)`。正式写入演示只针对用户明确指定的测试 Issue；真实写操作的目标与内容先完整展示，再执行。
 
 默认预览分支不得发出修改请求。标注 `readOnlyHint` 用于说明工具性质；具体仓库和写入限制仍由代码校验，不能只依赖提示或注解。
+
+### 首个只读工具的实现与阅读顺序
+
+`list_issues` 接收 state、page、page_size，使用严格类型与范围校验，拒绝字符串页码、布尔页码和额外仓库参数。仓库固定 beginner2077/agent，不让模型传入其他仓库或令牌；page_size 映射为 GitHub 参数 per_page，一次调用只读指定一页，按创建时间倒序。标题限制200字符，使用 title_truncated 明示截断；不返回正文、用户资料、全局id或凭据。
+
+数据流：Host 发起 tools/call → Server 校验参数 → TokenStore.access_token() 复用或按需刷新 → GET 固定仓库 Issues API → 排除带 pull_request 的记录 → 裁剪字段并返回。只读指不修改 Issue，授权层必要时仍可能 POST 令牌端点并更新本机缓存；令牌不进入工具返回或模型上下文。启动 Server、发现工具或调用 ping 均不加载凭据。
+
+GitHub 的一页记录可能混有 PR。例如上游10条中7条是PR，本工具返回3条Issue并保留上游分页信息。pagination 同时包含 upstream_count/returned_count，以及根据 Link 的 rel=next 得出的 has_next_page/next_page；不会直接跟随响应URL。到达本地100页上限而上游还有数据时，page_limit_reached=true、next_page=null，不能解释为数据已耗尽。
+
+阅读代码可按这个顺序：
+
+1. [server.py](server.py) 的 create_server() 与 list_issues()：生成工具描述/输入约束，延迟创建并复用业务客户端，结束时关闭资源。
+2. [github_issues.py](github_issues.py) 的 IssuesClient.list_issues()：参数检查、默认取令牌、固定地址 GET、错误映射、PR 排除和返回字段整理。
+3. [verify_issues.py](verify_issues.py) 的 read_once()：启动真实 stdio 子进程，先 tools/list，再 tools/call；此处由脚本选工具，尚无模型参与。
+
+已知授权/业务异常通过受控 ToolError 返回，MCP 的 is_error 为真，内容含 error/message/retryable；不输出远端响应正文。参数 schema 不合规由 SDK 拒绝。401返回auth_required；403按明确限流头区分rate_limited与forbidden；404不武断区分不存在和不可见；网络/HTTP失败不伪装成功空列表，不自动重试或跟随重定向。
+
+从项目根目录运行真实只读验证：
+
+```powershell
+.\week2\.venv\Scripts\python.exe -m week2.verify_issues --read
+```
+
+该命令仅读取固定仓库第1页，上游每页10条、状态all。使用已有缓存，必要时按需刷新，不使用force_refresh，不改变Issue状态。终端显示实际协议版本、工具名、筛选结果和分页信息。去掉 --read 仅显示说明，不启动服务或读凭据。不要单独往 Server 控制台输入自然语言。
+
+2026-11-05：原56项保持通过，新增33项检查，第二周共 **89 passed in 3.02s**。涵盖参数范围/类型、输出裁剪、PR-only分页、页数上限、HTTP/鉴权/格式错误、配置工厂复用临时缓存、MCP schema/错误标记、客户端入口，以及真实子进程 stdio 对模拟 GitHub 的调用。测试只使用虚构令牌、MockTransport 和临时缓存；本阶段未读取实际凭据或访问 GitHub。默认说明入口已实际运行，真实 --read 等待学习者执行并反馈。不以这些检查替代真实读取或模型端集成。
 
 ## OAuth 和权限
 
@@ -50,7 +76,7 @@ App 安装仅选择上述测试仓库。计划权限为 Repository `Issues: Read
 
 GitHub App 使用注册时配置的细粒度权限，不沿用传统 OAuth App 的 `repo` scope；用户令牌同时受用户自身权限和 App 权限约束。
 
-首次登录由独立的本机授权入口完成。后续 Server 将通过 `TokenStore.access_token()` 读取缓存，必要时刷新；刷新逻辑已实现，Server 接入尚未完成。授权失效且无法安全刷新时返回 `auth_required` 等可操作错误，不在工具调用中打开浏览器。
+首次登录由独立的本机授权入口完成。Server 的 list_issues 已通过 TokenStore.access_token() 读取缓存、必要时刷新，并在进程内复用同一 TokenStore；只有首个业务调用才加载配置。授权失效且无法安全刷新时返回 auth_required 等可操作错误，不在工具调用中打开浏览器。
 
 Client Secret、访问令牌与刷新令牌只在本机配置或缓存中管理，不写进示例配置、模型提示或日志。缓存位置、忽略规则和权限保护在实现前明确。
 
@@ -68,7 +94,7 @@ notepad "$env:LOCALAPPDATA\CS146S\github-mcp\.env"
 
 ## 本地 MCP 最小验证
 
-这是在业务工具与 OAuth 之前的自拟前置检查，不代表官方第二周作业已验收。仅提供 `ping` 工具，返回 `status=ok, scope=local_mcp`，不读取凭据、不访问 GitHub、不调用模型。
+最初在业务工具与 OAuth 之前的自拟前置检查仅提供 ping，不代表官方第二周作业已验收。当前 ping 仍返回 status=ok, scope=local_mcp，不读取凭据、不访问 GitHub、不调用模型；当前工具列表另含 list_issues。
 
 本轮使用独立的 `week2/.venv`，保留第一周根目录 `.venv` 的依赖。直接依赖版本见 [requirements.txt](requirements.txt)：FastMCP 4.1.6、MCP SDK 2.3.0；版本已从 PyPI 元数据核对。重建与检查命令均从项目根目录执行：
 
@@ -78,7 +104,7 @@ notepad "$env:LOCALAPPDATA\CS146S\github-mcp\.env"
 .\week2\.venv\Scripts\python.exe -m pytest week2/test_mcp_stdio.py -q -s
 ```
 
-[server.py](server.py) 用 `@mcp.tool(...)` 注册工具，用 `mcp.run(transport="stdio")` 处理协议消息；`show_banner=False` 仅隐藏启动横幅。单独启动命令为 `.\week2\.venv\Scripts\python.exe week2/server.py`，此时服务等待 MCP 请求，不是自然语言输入框。
+[server.py](server.py) 用 @mcp.tool(...) 注册工具，用 mcp.run(transport="stdio") 处理协议消息；show_banner=False 仅隐藏启动横幅。现在使用模块入口，从项目根目录执行 `.\week2\.venv\Scripts\python.exe -m week2.server`，此时服务等待 MCP 请求，不是自然语言输入框。测试客户端和验证脚本均已同步改为模块启动，以正确加载同包授权与业务模块。
 
 [test_mcp_stdio.py](test_mcp_stdio.py) 通过 `StdioTransport` 启动真实服务器子进程，先 `tools/list` 再 `tools/call`，检验工具名及返回内容。`ping` 是自定义工具名，请求方法仍为 `tools/call`；这里没有调用 Client 的协议级 `ping()`。测试打印的版本/工具名/结果是读取返回对象后的摘要，不是原始协议报文。SDK 自动选择协议版本，测试输出实际协商值，不预先假定旧版 `initialize` 流程。
 
@@ -120,7 +146,7 @@ HTTP 回调日志不会记录带 code 的 URL；错误不输出远端响应正�
 
 首次兑换和刷新共用 `oauth_login.tokens_from_payload()` 校验，`OAuthError` 新增 `retryable` 状态。本轮 `.\week2\.venv\Scripts\python.exe -m pytest week2 -q` 返回 **47 passed in 1.87s**（此前 23 项 + 24 项刷新用例），涵盖轮换两个令牌、临界过期、缓存损坏、失败重试策略、远端成功后写入失败、重新登录恢复及两个实例争用锁。所有刷新请求均使用 MockTransport 和虚构令牌，未访问真实刷新端点。
 
-另用禁止联网的客户端检查了真实缓存复用：返回现有访问令牌，网络请求为 0，`tokens.json` 字节未改变。只证明当时正常复用，尚未验证真实刷新、实际 API 401 处理或 MCP 业务工具集成。下一小步先完成一次真实刷新验证，再实现首个 GitHub 工具。
+此前另用禁止联网的客户端检查了真实缓存复用：返回现有访问令牌，网络请求为0，tokens.json字节未改变，该次只证明正常复用。最新真实刷新证据见下一节；业务 API 401 处理及 MCP 工具集成仍未验证。
 
 ## 独立真实刷新验证入口
 
@@ -154,7 +180,15 @@ HTTP 回调日志不会记录带 code 的 URL；错误不输出远端响应正�
 
 `TokenStore.access_token()` 默认仍按剩余有效期决定复用或刷新；新增的仅关键字参数 `force_refresh=True` 供显式验证使用，不作为 MCP 工具参数对模型暴露。复用既有缓存校验、OS 锁、刷新响应校验和原子保存逻辑，没有新增依赖。
 
-2026-11-05 离线验证：原47项保持通过，新增9项检查，共 **56 passed in 1.80s**。新增检查覆盖未到期时显式刷新、只读账号核对、两枚令牌变化、账号核对失败保留已保存状态、端点拒绝不重试、默认模式零凭据读取以及命令入口。所有请求使用 MockTransport 和虚构令牌；默认说明模式已实际运行，未读取或更新真实令牌。真实验证待学习者执行上述 `--refresh` 命令，反馈三阶段输出及布尔摘要，不发送本机配置或缓存内容。
+2026-11-05 离线验证：原47项保持通过，新增9项检查，共 **56 passed in 1.80s**。新增检查覆盖未到期时显式刷新、只读账号核对、两枚令牌变化、账号核对失败保留已保存状态、端点拒绝不重试、默认模式零凭据读取以及命令入口。该批测试全部使用 MockTransport 和虚构令牌；真实执行记录另列如下。
+
+2026-11-05 真实验证：学习者实际运行上述 --refresh 命令，提供了1/3至3/3的完整终端输出，最终为“刷新验证通过”，安全摘要如下：
+
+```json
+{"account":"beginner2077","access_token_rotated":true,"refresh_token_rotated":true,"cached_access_token_matches":true,"user_verified":true}
+```
+
+按此程序实现与输出，本次两枚令牌已变化、返回访问令牌与缓存一致，且使用该令牌 GET /user 核对账号成功。证据来源是学习者提供的运行输出；教师未再调用刷新端点或读取实际令牌内容，不要求再次执行。此项验证了授权刷新链路，没有查询 Issue 或通过 MCP 业务工具调用，不代表后者已经接通。下一步实现 list_issues，并分别验证函数逻辑、MCP 调用和真实 GitHub 数据。
 
 ## 小步实施与验收
 
@@ -162,7 +196,7 @@ HTTP 回调日志不会记录带 code 的 URL；错误不输出远端响应正�
 
 2、已在独立环境安装固定版本 FastMCP/SDK，最小 stdio 协议测试通过，记录了实际版本；课堂脚本的 DeepSeek 配置未改。
 
-3、独立 OAuth 首次登录与缓存已真实验证；静默刷新及失败分支已实现，新增真实刷新验证入口，56项离线测试通过，下一步由学习者验证一次真实刷新。
+3、独立 OAuth 首次登录与缓存、显式真实刷新及账号核对均已有运行证据；刷新实现与验证入口56项离线测试通过，无需重复刷新。
 
 4、逐个实现工具。通过 MCP Client 调用 `tools/list` 和 `tools/call`，验证 schema、输出裁剪、PR 排除、预览零写入及结构化错误。
 

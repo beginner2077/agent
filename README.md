@@ -6,11 +6,11 @@
 
 **学习方式：** 对话内的连续中文讲义是主要阅读入口；本文件和交接文档保存进度，练习 README 保存运行方法与证据。每个阶段按问题、机制、代表性实验和综合迁移组织，先理解框架，再观察命令输出。
 
-**下一步：** 已回第二周 MCP。[真实刷新验证入口](week2/README.md#独立真实刷新验证入口)已准备好，第二周56项离线测试通过；由学习者执行一次显式刷新并只读核对账号，真实结果待反馈，再逐个实现 GitHub 业务工具。前一模型/上下文补充阶段已在对话归纳并反馈两道综合情境；相关实验、阅读及独立掌握缺口继续保留。
+**下一步：** 第二周 [list_issues 工具](week2/README.md#首个只读工具的实现与阅读顺序)已实现，89项离线检查通过，含真实 stdio 对模拟 GitHub 的调用。学习者的真实刷新与账号核对已通过；下一步运行 `.\week2\.venv\Scripts\python.exe -m week2.verify_issues --read` 验证真实只读列表。get_issue、set_issue_state 及模型端串联尚未实现/验证，前一补充阶段缺口继续保留。
 
 **当前练习（2026-11-05）：** [指令、示例与外部资料四组对照](labs/prompt_context/README.md)已完成12次真实请求；[最小本地检索练习](labs/retrieval/README.md)也已完成完整/缺认证两案各三次真实生成，原始记录与重算评分一致：完整案方案完整，缺认证案三个已知字段正确、认证返回 null。此前新增15项离线检查通过，根环境合测53项通过；语义检索及更广泛效果未验证。用户最新授权：新增代码自动加入 Git；完整练习、专题或独立修复验证后，再自主 commit 和 push，不按每轮问答提交。提交说明保留类型前缀，冒号后直接接中文且不加空格，如 `docs:补充检索验收说明`、`feat:新增本地检索练习`。凭据和原始运行记录继续忽略；已推送历史保留。
 
-**当前进度以 [学习交接](LEARNING_HANDOFF.md) 和 [第一周覆盖清单](WEEK1_LEARNING_CHECKLIST.md) 为准。** 已选择 Claude Code + DeepSeek。第二周课堂文字稿及指定阅读核心已中文导读，官方MCP作业选用GitHub App用户OAuth，测试仓库为 [beginner2077/agent](https://github.com/beginner2077/agent)。初始学习内容已推送至 `main`，练习 Issue [#4](https://github.com/beginner2077/agent/issues/4)、[#5](https://github.com/beginner2077/agent/issues/5)、[#6](https://github.com/beginner2077/agent/issues/6) 已创建；[工具契约与练习入口](week2/README.md)已记录。GitHub App 已注册，仅安装到 `agent`（已通过 API 核对）；仓库外本机配置已保存，状态检查通过；独立 MCP 环境及最小 stdio 协议测试已通过；OAuth 首次真实登录已成功，缓存及安装范围已只读核对；按需刷新逻辑及独立验证入口已实现，第二周56项离线测试通过，真实刷新待验证；GitHub业务工具尚未实现。第一周视频/X原文、部分材料与正式writeup等缺口继续保留，不以局部检查代替整周验收。基础可简讲，新概念与前置不能跳过。
+**当前进度以 [学习交接](LEARNING_HANDOFF.md) 和 [第一周覆盖清单](WEEK1_LEARNING_CHECKLIST.md) 为准。** 已选择 Claude Code + DeepSeek。第二周课堂文字稿及指定阅读核心已中文导读，官方MCP作业选用GitHub App用户OAuth，测试仓库为 [beginner2077/agent](https://github.com/beginner2077/agent)。初始学习内容已推送至 `main`，练习 Issue [#4](https://github.com/beginner2077/agent/issues/4)、[#5](https://github.com/beginner2077/agent/issues/5)、[#6](https://github.com/beginner2077/agent/issues/6) 已创建；[工具契约与练习入口](week2/README.md)已记录。GitHub App 已注册，仅安装到 `agent`（已通过 API 核对）；仓库外本机配置已保存，状态检查通过；独立 MCP 环境及最小 stdio 协议测试已通过；OAuth 首次真实登录已成功，缓存及安装范围已只读核对；真实刷新及账号核对已收到成功输出；首个只读列表工具已接入，第二周89项离线测试通过，真实列表读取待验证，详情与写工具尚未实现。第一周视频/X原文、部分材料与正式writeup等缺口继续保留，不以局部检查代替整周验收。基础可简讲，新概念与前置不能跳过。
 
 已完成练习：[第一周 Part I：多文件修复与失败恢复](labs/week1_trace/README.md)。初始导入错误已修复，当前 6 项测试通过；代理轨迹保留了失败、两次 Edit 及再次验证的证据。
 

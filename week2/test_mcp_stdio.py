@@ -34,15 +34,25 @@ def test_issue_call_over_real_stdio_with_mock_github():
     # 子进程运行真实工具和MCP协议，只替换上游HTTP及凭据，不读取本机配置。
     fixture_code = '''
 import httpx
+import json
 from week2.github_issues import IssuesClient
 from week2.server import create_server
 class Tokens:
     def access_token(self):
         return "fictional-access"
+current_state = "open"
 def endpoint(request):
-    assert request.method == "GET" and request.url.host == "api.github.com"
+    global current_state
+    assert request.url.host == "api.github.com"
+    if request.method == "PATCH":
+        assert request.url.path == "/repos/beginner2077/agent/issues/5"
+        payload = json.loads(request.content)
+        assert set(payload) == {"state"}
+        current_state = payload["state"]
+    else:
+        assert request.method == "GET"
     if request.url.path.endswith("/issues/5"):
-        return httpx.Response(200, json={"number": 5, "title": "fixture", "state": "open", "body": "fixture body", "html_url": "https://github.com/beginner2077/agent/issues/5"})
+        return httpx.Response(200, json={"number": 5, "title": "fixture", "state": current_state, "body": "fixture body", "html_url": "https://github.com/beginner2077/agent/issues/5"})
     return httpx.Response(200, json=[
         {"pull_request": {}},
         {"number": 5, "title": "fixture", "state": "open", "html_url": "https://github.com/beginner2077/agent/issues/5"}
@@ -71,5 +81,9 @@ create_server(IssuesClient(Tokens(), httpx.Client(transport=httpx.MockTransport(
                 "method": "PATCH", "url": "https://api.github.com/repos/beginner2077/agent/issues/5",
                 "json": {"state": "closed"},
             }
+            for state in ("closed", "open"):
+                executed = await client.call_tool("set_issue_state", {"issue_number": selected, "state": state, "dry_run": False})
+                assert not executed.is_error and executed.data["applied"] is True
+                assert executed.data["verified"] is True and executed.data["verified_state"] == state
 
     asyncio.run(exercise())

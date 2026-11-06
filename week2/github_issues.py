@@ -1,4 +1,4 @@
-"""固定测试仓库的只读业务逻辑，不直接暴露凭据或上游原始响应。"""
+"""固定测试仓库的Issue操作；写入仅限#5的state，不暴露凭据。"""
 
 import httpx
 
@@ -44,27 +44,34 @@ class IssuesClient:
     def close(self):
         self.client.close()
 
-    def _get(self, url: str, params=None) -> httpx.Response:
+    def _request(self, method: str, url: str, *, params=None, json=None) -> httpx.Response:
         access_token = self.tokens.access_token()
+        writing = method == "PATCH"
         try:
-            response = self.client.get(url, params=params, headers={
+            response = self.client.request(method, url, params=params, json=json, headers={
                 "Authorization": "Bearer " + access_token,
                 "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2026-03-10",
             }, follow_redirects=False)
         except httpx.RequestError:
+            if writing:
+                raise IssueError("write_outcome_unknown", "修改请求的网络结果未知；请先读取#5状态，不要盲目重试。") from None
             raise IssueError("github_unavailable", "GitHub 查询网络失败，本次没有取得结果，可稍后重试。", True) from None
         status = response.status_code
         if status == 401:
             raise IssueError("auth_required", "GitHub 拒绝当前凭据，请独立重新登录：" + LOGIN_COMMAND)
         if status == 429 or (status == 403 and (
                 response.headers.get("x-ratelimit-remaining") == "0" or "retry-after" in response.headers)):
-            raise IssueError("rate_limited", "GitHub 暂时限流，请稍后重试。", True)
+            raise IssueError("rate_limited", "GitHub 暂时限流；写操作先核对状态，不自动重试。", not writing)
         if status == 403:
-            raise IssueError("forbidden", "GitHub 拒绝读取，请检查权限、组织策略或限流信息。")
+            raise IssueError("forbidden", "GitHub 拒绝操作，请检查权限、组织策略或限流信息。")
         if status == 404:
             raise IssueError("not_found_or_forbidden", "资源不存在或对当前授权不可见，请核对仓库、编号及安装范围。")
         if status != 200:
+            if writing:
+                if status in (410, 422):
+                    raise IssueError("write_rejected", f"GitHub 拒绝修改（HTTP {status}），请核对目标和参数。")
+                raise IssueError("write_outcome_unknown", f"修改返回HTTP {status}，未确认结果；请先读取#5状态，不要盲目重试。")
             raise IssueError("github_http_error", f"GitHub 查询返回 HTTP {status}，未取得结果。", status >= 500)
         return response
 
@@ -73,7 +80,7 @@ class IssuesClient:
                 or type(page) is not int or not 1 <= page <= MAX_PAGE
                 or type(page_size) is not int or not 1 <= page_size <= MAX_PAGE_SIZE):
             raise IssueError("invalid_arguments", "请使用有效状态、1至100的页码和1至10的每页条数。")
-        response = self._get(ISSUES_URL, params={
+        response = self._request("GET", ISSUES_URL, params={
             "state": state, "page": page, "per_page": page_size,
             "sort": "created", "direction": "desc",
         })
@@ -102,7 +109,7 @@ class IssuesClient:
     def get_issue(self, issue_number: int) -> dict:
         if type(issue_number) is not int or issue_number <= 0:
             raise IssueError("invalid_arguments", "issue_number 必须是正整数。")
-        row = read_json(self._get(f"{ISSUES_URL}/{issue_number}"))
+        row = read_json(self._request("GET", f"{ISSUES_URL}/{issue_number}"))
         if not isinstance(row, dict):
             raise IssueError("upstream_invalid", "GitHub 详情不是有效对象。")
         if "pull_request" in row:
@@ -122,20 +129,42 @@ class IssuesClient:
                 or state not in ("open", "closed") or type(dry_run) is not bool):
             raise IssueError("invalid_arguments", "请使用正整数编号、open/closed状态和布尔dry_run。")
         if issue_number != STATE_CHANGE_ISSUE:
-            raise IssueError("target_not_allowed", "状态预览仅限专用测试Issue #5。")
-        if not dry_run:
-            raise IssueError("write_not_enabled", "当前阶段仅开放预览，真实写入尚未开放。")
+            raise IssueError("target_not_allowed", "状态操作仅限专用测试Issue #5。")
         current = self.get_issue(issue_number)["issue"]
         would_change = current["state"] != state
-        return {
+        result = {
             "repository": REPOSITORY, "issue_number": issue_number,
             "title": current["title"], "title_truncated": current["title_truncated"], "url": current["url"],
             "current_state": current["state"], "target_state": state,
-            "dry_run": True, "would_change": would_change, "applied": False,
-            # 这是计划数据，当前版本没有任何执行此PATCH的代码路径。
+            "dry_run": dry_run, "would_change": would_change, "applied": False,
+            # 返回计划不会执行；只有显式dry_run=false才会进入下方写分支。
             "planned_request": {"method": "PATCH", "url": f"{ISSUES_URL}/{issue_number}",
                                 "json": {"state": state}} if would_change else None,
         }
+        if dry_run:
+            return result
+        if not would_change:
+            return {**result, "verified": True, "verified_state": current["state"]}
+        response = self._request("PATCH", f"{ISSUES_URL}/{issue_number}", json={"state": state})
+        try:
+            row = read_json(response)
+            if not isinstance(row, dict) or "pull_request" in row:
+                raise IssueError("upstream_invalid", "修改响应不是Issue。")
+            updated = summarize_issue(row)
+            if updated["issue_number"] != issue_number or updated["state"] != state:
+                raise IssueError("upstream_invalid", "修改响应与目标不符。")
+        except IssueError:
+            raise IssueError("write_outcome_unknown", "已收到修改响应，但无法确认目标和状态；请先读取#5，不要盲目重试。") from None
+        result.update({"applied": True, "verified": False, "verified_state": None})
+        try:
+            observed = self.get_issue(issue_number)["issue"]["state"]
+        except OAuthError as error:
+            result["verification_error"] = {"error": error.code, "message": str(error)}
+            return result
+        result.update({"verified": observed == state, "verified_state": observed})
+        if not result["verified"]:
+            result["verification_error"] = {"error": "state_mismatch", "message": "修改已确认，但回读状态与目标不符；停止，不自动重试。"}
+        return result
 
 
 def configured_client() -> IssuesClient:

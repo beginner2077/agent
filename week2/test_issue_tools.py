@@ -6,6 +6,7 @@ import sys
 
 from fastmcp import Client
 import httpx
+import pytest
 
 from week2 import github_issues as api
 from week2 import server
@@ -17,9 +18,17 @@ class Tokens:
         return "fictional-access"
 
 
-def make_server(status=200, calls=None, detail_status=200, number=4, current_state="open"):
+def make_server(status=200, calls=None, detail_status=200, number=4, current_state="open", writes=None):
     def endpoint(request):
-        assert request.method == "GET"
+        nonlocal current_state
+        if request.method == "PATCH":
+            assert writes is not None and number == 5
+            payload = json.loads(request.content)
+            assert set(payload) == {"state"} and payload["state"] in ("open", "closed")
+            writes.append(payload)
+            current_state = payload["state"]
+        else:
+            assert request.method == "GET"
         url = str(request.url).split("?")[0]
         assert url in (api.ISSUES_URL, api.ISSUES_URL + f"/{number}")
         if calls is not None:
@@ -54,9 +63,10 @@ def test_schema_validation_and_ping_do_not_load_credentials(monkeypatch):
             assert set(tools["get_issue"].input_schema["properties"]) == {"issue_number"}
             assert tools["get_issue"].annotations.read_only_hint
             preview_schema = tools["set_issue_state"].input_schema["properties"]
-            assert preview_schema["dry_run"]["const"] is True and preview_schema["dry_run"]["default"] is True
+            assert preview_schema["dry_run"]["type"] == "boolean" and preview_schema["dry_run"]["default"] is True
             assert preview_schema["issue_number"]["const"] == 5
-            assert tools["set_issue_state"].annotations.read_only_hint
+            assert not tools["set_issue_state"].annotations.read_only_hint
+            assert tools["set_issue_state"].annotations.destructive_hint
             assert (await client.call_tool("ping", {})).data["status"] == "ok"
             for args in ({"page": 0}, {"page": "1"}, {"page": True}, {"page_size": 11},
                          {"state": "invalid"}, {"repository": "other/repo"}):
@@ -68,7 +78,8 @@ def test_schema_validation_and_ping_do_not_load_credentials(monkeypatch):
             for args in ({"issue_number": 4, "state": "closed"}, {"issue_number": "5", "state": "closed"},
                          {"issue_number": 5.0, "state": "closed"},
                          {"issue_number": 5, "state": "all"},
-                         {"issue_number": 5, "state": "closed", "dry_run": False},
+                         {"issue_number": 5, "state": "closed", "dry_run": "true"},
+                         {"issue_number": 5, "state": "closed", "dry_run": 0},
                          {"issue_number": 5, "state": "closed", "dry_run": 1}):
                 assert (await client.call_tool("set_issue_state", args, raise_on_error=False)).is_error
                 assert calls == [], f"invalid preview arguments reached credential loading: {args}"
@@ -202,3 +213,43 @@ def test_verifier_rejects_preview_result_claiming_applied(monkeypatch, capsys):
     printed = capsys.readouterr()
     assert "不能视为未写入" in printed.out
     assert "默认预览串联成功" not in printed.out
+
+
+@pytest.mark.parametrize("initial,target", [("open", "closed"), ("closed", "open"), ("closed", "closed")])
+def test_apply_cli_previews_then_writes_if_needed_and_verifies(monkeypatch, capsys, initial, target):
+    calls, writes = [], []
+    monkeypatch.setattr(sys, "argv", ["verify_issues", "--read", "--detail", "5", "--apply-state", target])
+    monkeypatch.setattr(check, "StdioTransport", lambda **kwargs: make_server(calls=calls, number=5, current_state=initial, writes=writes))
+    assert check.main() == 0
+    assert writes == ([{"state": target}] if initial != target else [])
+    assert len(calls) == (6 if initial != target else 4)
+    output = capsys.readouterr().out
+    assert '"preview_result"' in output and '"execution_result"' in output
+    assert '"verified": true' in output and "6/6 执行流程完成" in output
+
+
+def test_apply_cli_does_not_report_success_when_write_is_unverified(monkeypatch, capsys):
+    original = api.IssuesClient.set_issue_state
+    def unverified(self, issue_number, state, dry_run=True):
+        if dry_run:
+            return original(self, issue_number, state)
+        return {"dry_run": False, "applied": True, "would_change": True, "verified": False, "verified_state": None}
+    monkeypatch.setattr(api.IssuesClient, "set_issue_state", unverified)
+    monkeypatch.setattr(sys, "argv", ["verify_issues", "--read", "--detail", "5", "--apply-state", "closed"])
+    monkeypatch.setattr(check, "StdioTransport", lambda **kwargs: make_server(number=5))
+    assert check.main() == 1
+    output = capsys.readouterr().out
+    assert '"applied": true' in output and "可能已写入" in output
+    assert "执行流程完成" not in output
+
+
+@pytest.mark.parametrize("arguments", [
+    ["--apply-state", "closed"], ["--read", "--detail", "4", "--apply-state", "closed"],
+    ["--read", "--detail", "5", "--apply-state", "closed", "--preview-state", "closed"],
+])
+def test_invalid_apply_cli_arguments_stop_before_startup(monkeypatch, arguments):
+    monkeypatch.setattr(sys, "argv", ["verify_issues", *arguments])
+    monkeypatch.setattr(check, "StdioTransport", lambda **kwargs: pytest.fail("must not start server"))
+    with pytest.raises(SystemExit) as error:
+        check.main()
+    assert error.value.code == 2

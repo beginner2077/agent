@@ -256,9 +256,8 @@ def test_default_state_preview_only_reads_and_builds_plan_if_needed(current_stat
     ({"issue_number": 5, "state": "all"}, "invalid_arguments"),
     ({"issue_number": 5, "state": "closed", "dry_run": "true"}, "invalid_arguments"),
     ({"issue_number": 5, "state": "closed", "dry_run": 1}, "invalid_arguments"),
-    ({"issue_number": 5, "state": "closed", "dry_run": False}, "write_not_enabled"),
 ])
-def test_state_preview_blocks_other_targets_invalid_values_and_actual_writes(arguments, code):
+def test_state_operation_blocks_other_targets_and_invalid_values(arguments, code):
     tokens = Tokens()
     with httpx.Client(transport=httpx.MockTransport(lambda request: pytest.fail("must not request"))) as http:
         with pytest.raises(api.IssueError) as error:
@@ -278,3 +277,111 @@ def test_state_preview_rejects_pr_without_a_write_request():
         with pytest.raises(api.IssueError) as error:
             api.IssuesClient(Tokens(), http).set_issue_state(5, "closed")
     assert error.value.code == "not_an_issue" and calls == ["GET"]
+
+
+@pytest.mark.parametrize("target", ["closed", "open"])
+def test_explicit_write_only_changes_state_then_reads_back(target):
+    current = "open" if target == "closed" else "closed"
+    calls = []
+
+    def endpoint(request):
+        nonlocal current
+        assert str(request.url) == api.ISSUES_URL + "/5"
+        assert request.headers["Authorization"] == "Bearer fictional-access"
+        calls.append(request.method)
+        if request.method == "PATCH":
+            assert json.loads(request.content) == {"state": target}
+            current = target
+        else:
+            assert request.method == "GET"
+        return httpx.Response(200, json=issue(5, state=current))
+
+    with httpx.Client(transport=httpx.MockTransport(endpoint)) as http:
+        client = api.IssuesClient(Tokens(), http)
+        result = client.set_issue_state(5, target, dry_run=False)
+        repeated = client.set_issue_state(5, target, dry_run=False)
+    assert calls == ["GET", "PATCH", "GET", "GET"]
+    assert result["applied"] is True and result["verified"] is True and result["dry_run"] is False
+    assert result["verified_state"] == target
+    assert repeated["applied"] is False and repeated["would_change"] is False
+    assert repeated["verified"] is True and repeated["planned_request"] is None
+
+
+@pytest.mark.parametrize("arguments", [
+    {"issue_number": 4, "state": "closed", "dry_run": False},
+    {"issue_number": 5, "state": "closed", "dry_run": 0},
+])
+def test_invalid_write_does_not_load_tokens_or_send_http(arguments):
+    tokens = Tokens()
+    with httpx.Client(transport=httpx.MockTransport(lambda request: pytest.fail("must not request"))) as http:
+        with pytest.raises(api.IssueError):
+            api.IssuesClient(tokens, http).set_issue_state(**arguments)
+    assert tokens.calls == 0
+
+
+@pytest.mark.parametrize("failure,code", [
+    ("timeout", "write_outcome_unknown"), (503, "write_outcome_unknown"),
+    (302, "write_outcome_unknown"), (401, "auth_required"), (403, "forbidden"),
+    (404, "not_found_or_forbidden"), (422, "write_rejected"), (429, "rate_limited"),
+    ("invalid_json", "write_outcome_unknown"), ("wrong_state", "write_outcome_unknown"),
+    ("wrong_number", "write_outcome_unknown"), ("pr", "write_outcome_unknown"),
+])
+def test_write_failures_do_not_retry_or_claim_no_write(failure, code):
+    calls = []
+
+    def endpoint(request):
+        calls.append(request.method)
+        if request.method == "GET":
+            return httpx.Response(200, json=issue(5))
+        assert request.method == "PATCH"
+        if failure == "timeout":
+            raise httpx.ReadTimeout("private-response-body", request=request)
+        if type(failure) is int:
+            return httpx.Response(failure, text="private-response-body", headers={"Location": "https://example.com"})
+        if failure == "invalid_json":
+            return httpx.Response(200, text="private-response-body")
+        row = issue(4 if failure == "wrong_number" else 5,
+                    state="open" if failure == "wrong_state" else "closed")
+        if failure == "pr":
+            row["pull_request"] = {}
+        return httpx.Response(200, json=row)
+
+    with httpx.Client(transport=httpx.MockTransport(endpoint), follow_redirects=True) as http:
+        with pytest.raises(api.IssueError) as error:
+            api.IssuesClient(Tokens(), http).set_issue_state(5, "closed", False)
+    assert error.value.code == code and error.value.retryable is False
+    assert calls == ["GET", "PATCH"]
+    assert "private-response-body" not in str(error.value) and "fictional-access" not in str(error.value)
+
+
+@pytest.mark.parametrize("after", ["mismatch", "timeout", "auth"])
+def test_confirmed_patch_but_failed_readback_preserves_applied_without_claiming_verified(after):
+    calls = []
+
+    def endpoint(request):
+        calls.append(request.method)
+        if len(calls) == 1:
+            return httpx.Response(200, json=issue(5))
+        if request.method == "PATCH":
+            return httpx.Response(200, json=issue(5, state="closed"))
+        if after == "timeout":
+            raise httpx.ReadTimeout("private-response-body", request=request)
+        return httpx.Response(401, text="private-response-body") if after == "auth" else httpx.Response(200, json=issue(5))
+
+    with httpx.Client(transport=httpx.MockTransport(endpoint)) as http:
+        result = api.IssuesClient(Tokens(), http).set_issue_state(5, "closed", False)
+    assert calls == ["GET", "PATCH", "GET"]
+    assert result["applied"] is True and result["verified"] is False
+    assert result["verification_error"]["error"] == {"mismatch": "state_mismatch", "timeout": "github_unavailable", "auth": "auth_required"}[after]
+    assert "private-response-body" not in json.dumps(result)
+
+
+def test_failed_pre_read_does_not_send_patch():
+    calls = []
+    def endpoint(request):
+        calls.append(request.method)
+        return httpx.Response(403, text="private-response-body")
+    with httpx.Client(transport=httpx.MockTransport(endpoint)) as http:
+        with pytest.raises(api.IssueError) as error:
+            api.IssuesClient(Tokens(), http).set_issue_state(5, "closed", False)
+    assert error.value.code == "forbidden" and calls == ["GET"]

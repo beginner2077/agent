@@ -1,4 +1,4 @@
-"""第二周 MCP：只读列表、详情及专用测试Issue状态预览。"""
+"""第二周 MCP：列表、详情及默认预览的专用测试Issue状态操作。"""
 
 from contextlib import asynccontextmanager
 import json
@@ -7,17 +7,10 @@ from typing import Annotated, Literal
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from pydantic import BeforeValidator, Field
+from pydantic import Field
 
 from .github_issues import IssuesClient, MAX_PAGE, MAX_PAGE_SIZE, STATE_CHANGE_ISSUE, configured_client
 from .oauth_login import OAuthError
-
-
-def require_preview(value):
-    # Literal[True]可能接受数字1；必须在隐式转换前检查原始类型和值。
-    if type(value) is not bool or not value:
-        raise ValueError("当前dry_run只允许布尔true")
-    return value
 
 
 def create_server(issues_client: IssuesClient | None = None) -> FastMCP:
@@ -36,7 +29,8 @@ def create_server(issues_client: IssuesClient | None = None) -> FastMCP:
         "CS146S GitHub Issues",
         instructions="ping仅检查本地通信；list_issues和get_issue只读查询beginner2077/agent。"
                      "详情使用列表返回的issue_number，拒绝PR；正文截断时不可当作全文。"
-                     "set_issue_state当前只允许#5的dry_run=true预览，不执行写入。"
+                     "set_issue_state仅操作#5，默认dry_run=true；明确执行时才传false，仅改变state并回读。"
+                     "写入结果未知或核验失败时停止，先读状态，不盲目重试；预览不是执行授权。"
                      "PR已过滤，少于一页或空页仍需查看分页。错误不代表空列表；auth_required应独立登录。",
         lifespan=lifespan, mask_error_details=True, strict_input_validation=True,
     )
@@ -88,22 +82,24 @@ def create_server(issues_client: IssuesClient | None = None) -> FastMCP:
         """
         return invoke("get_issue", issue_number=issue_number)
 
-    @mcp.tool(title="预览测试Issue状态（写入未开放）",
-              annotations={"readOnlyHint": True, "destructiveHint": False, "openWorldHint": True})
+    @mcp.tool(title="测试Issue状态（默认预览）",
+              annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": True})
     def set_issue_state(
         issue_number: Annotated[int, Field(ge=STATE_CHANGE_ISSUE, le=STATE_CHANGE_ISSUE, strict=True,
                                           json_schema_extra={"const": STATE_CHANGE_ISSUE})],
         state: Literal["open", "closed"],
-        dry_run: Annotated[Literal[True], BeforeValidator(require_preview)] = True,
+        dry_run: Annotated[bool, Field(strict=True)] = True,
     ) -> dict:
-        """只预览固定仓库专用Issue #5的状态计划，不执行PATCH。
+        """固定仓库专用Issue #5的状态操作；默认预览，不发送PATCH。
 
-        当前dry_run仅允许true。applied=false代表未写入；would_change只比较本次读取状态。
+        显式false才执行：先重新读取，已是目标则不写，否则只PATCH state并回读。
+        applied表示修改响应已确认，verified表示随后回读符合目标；两者需分别判断。
+        结果未知或verified=false时停止，不自动重试，也不据此断言没有写入。
 
         Args:
             issue_number: 从list_issues/get_issue取得的专用测试编号5。
             state: 计划的open或closed状态。
-            dry_run: 当前只能为true，默认true；真实写入尚未开放。
+            dry_run: 默认true预览；仅在用户明确要求执行该目标时传false。
         """
         return invoke("set_issue_state", issue_number=issue_number, state=state, dry_run=dry_run)
 

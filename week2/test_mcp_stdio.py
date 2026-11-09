@@ -1,6 +1,7 @@
 """通过真实子进程的 stdin/stdout 调用工具，不直接调用 ping 函数。"""
 
 import asyncio
+import json
 from pathlib import Path
 import sys
 
@@ -9,11 +10,15 @@ from fastmcp.client.transports import StdioTransport
 
 
 def test_list_and_call_over_stdio():
+    root = Path(__file__).resolve().parents[1]
+    config = json.loads((root / "week2/.mcp.json.example").read_text(encoding="utf-8"))
+    launch = config["mcpServers"]["cs146s-github"]
+    assert launch["type"] == "stdio"
     async def exercise():
         transport = StdioTransport(
-            command=sys.executable,
-            args=["-m", "week2.server"],
-            cwd=str(Path(__file__).resolve().parents[1]),
+            command=str((root / launch["command"]).resolve()),
+            args=launch["args"],
+            cwd=str(root),
             keep_alive=False,
         )
         async with Client(transport, timeout=20) as client:

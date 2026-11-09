@@ -253,3 +253,50 @@ def test_invalid_apply_cli_arguments_stop_before_startup(monkeypatch, arguments)
     with pytest.raises(SystemExit) as error:
         check.main()
     assert error.value.code == 2
+
+
+@pytest.mark.parametrize("committed_before_timeout", [False, True], ids=["not-applied", "applied"])
+def test_mcp_write_timeout_recovery_reads_state_without_retrying(committed_before_timeout):
+    """相同超时对应两种远端状态；MCP错误后只读恢复，不能推断未写入。"""
+    current_state = "open"
+    calls = []
+
+    def endpoint(request):
+        nonlocal current_state
+        assert str(request.url) == api.ISSUES_URL + "/5"
+        calls.append(request.method)
+        if request.method == "PATCH":
+            assert json.loads(request.content) == {"state": "closed"}
+            if committed_before_timeout:
+                current_state = "closed"
+            # 模拟响应超时，传输层不会向真实GitHub发送请求。
+            raise httpx.ReadTimeout("fictional-response-timeout", request=request)
+        assert request.method == "GET"
+        return httpx.Response(200, json={
+            "number": 5, "title": "fictional recovery issue", "body": "fixture",
+            "state": current_state, "html_url": "https://github.com/beginner2077/agent/issues/5",
+        })
+
+    async def exercise():
+        http = httpx.Client(transport=httpx.MockTransport(endpoint))
+        async with Client(server.create_server(api.IssuesClient(Tokens(), http))) as client:
+            failed = await client.call_tool("set_issue_state", {
+                "issue_number": 5, "state": "closed", "dry_run": False,
+            }, raise_on_error=False)
+            assert failed.is_error
+            error = json.loads(next(item.text for item in failed.content if item.type == "text"))
+            assert error["error"] == "write_outcome_unknown" and error["retryable"] is False
+            assert "fictional-access" not in json.dumps(error)
+            recovered = await client.call_tool("get_issue", {"issue_number": 5})
+            assert not recovered.is_error
+            observed = recovered.data["issue"]["state"]
+            assert observed == ("closed" if committed_before_timeout else "open")
+            assert calls == ["GET", "PATCH", "GET"]
+            print(json.dumps({
+                "simulation": "applied_before_timeout" if committed_before_timeout else "not_applied_before_timeout",
+                "tool_error": error["error"], "retryable": error["retryable"],
+                "recovery_tool": "get_issue", "observed_state": observed,
+                "target_satisfied_at_readback": observed == "closed", "patch_requests": calls.count("PATCH"),
+            }, ensure_ascii=False))
+
+    asyncio.run(exercise())

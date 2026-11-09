@@ -76,6 +76,8 @@ def create_server(issues_client: IssuesClient | None = None) -> FastMCP:
         """只读取得固定仓库Issue详情；使用列表的issue_number，拒绝PR。
 
         正文最多返回4000字符，body_length为原长度，body_truncated说明是否截断。
+        body_truncated=false仅说明本工具返回正文未截断。
+        若答复只摘录部分内容，请标注摘录或摘要，不声称已展示完整正文。
 
         Args:
             issue_number: 列表返回的正整数编号，不是GitHub全局id。

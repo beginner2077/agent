@@ -15,3 +15,4 @@ captures/
 traces/
 .claude/settings.local.json
 .mcp.json
+.claude/skills/issue-evidence-report/

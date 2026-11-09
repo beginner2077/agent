@@ -1,12 +1,12 @@
 # 第二周实操：GitHub Issues MCP Server
 
-教学推进说明（2026-11-06）：主线Fall 2026。真实刷新、列表、详情及#5默认预览已有输出；显式执行分支及148项离线测试已完成。下一步验证#5真实关闭，教师未执行写入，模型选工具尚未验证。
+教学推进说明（2026-11-09）：主线Fall 2026。真实刷新、列表、详情及#5预览→关闭→重新打开均收到学习者输出；实现阶段148项离线测试通过。下一步失败恢复与模型端工具组合，不重复已通过的状态变更。
 
 依据：[官方第二周作业](../course-assignments/week2/assignment.md)。本目录是当前学习项目的实现位置，不修改官方仓库副本，不代填正式 writeup。用户已授权将当前学习内容提交到下述仓库，并创建练习 Issue。
 
 ## 当前状态
 
-测试仓库为 [beginner2077/agent](https://github.com/beginner2077/agent)。GitHub App 所有者 `beginner2077`，App ID `5608184`，Client ID `Iv23liKKXW1SNhxqjN1I`（均为应用标识，不是密钥）。首次真实 OAuth 登录、范围核对及真实刷新证据保留。当前Server提供ping、list_issues、get_issue、set_issue_state（默认预览，显式false执行#5状态操作）；第二周148项离线检查通过。真实预览已有输出，实际写入、模型端调用及完整协议证据整理尚待验证。
+测试仓库为 [beginner2077/agent](https://github.com/beginner2077/agent)。GitHub App 所有者 `beginner2077`，App ID `5608184`，Client ID `Iv23liKKXW1SNhxqjN1I`（均为应用标识，不是密钥）。首次真实 OAuth 登录、范围核对及真实刷新证据保留。当前Server提供ping、list_issues、get_issue、set_issue_state（默认预览，显式false执行#5状态操作）；第二周148项离线检查通过。真实预览、关闭及重新打开均已有输出；最后一次回读open。失败恢复、模型端调用及完整协议证据整理尚待完成。
 
 当前发布使用 Git 的独立登录，不代表第二周 MCP 的 GitHub App OAuth 已完成。提交作者仅在本仓库设置为 `beginner2077 <97858703+beginner2077@users.noreply.github.com>`，不更改全局 Git 身份。
 
@@ -32,7 +32,7 @@
 | --- | --- | --- | --- |
 | `list_issues`（已实现） | `state` 为 `open/closed/all`，page=1至100，page_size=1至10，默认open/1/10 | 精简列表：`issue_number/title/title_truncated/state/url` 及分页信息 | 只读 |
 | `get_issue`（已实现） | `issue_number`，取自列表的同名字段，严格正整数 | 精简详情：编号、标题、正文、状态、URL；标题限200字符，正文限4000字符，标记截断及原正文长度 | 只读 |
-| `set_issue_state`（真实写入待验证） | 编号仅5，state为open/closed，dry_run严格布尔、默认true | 计划；显式false按需修改并返回applied、verified、verified_state | 可写，默认预览 |
+| `set_issue_state`（真实关闭/重开已验证） | 编号仅5，state为open/closed，dry_run严格布尔、默认true | 计划；显式false按需修改并返回applied、verified、verified_state | 可写，默认预览 |
 
 `issue_number` 对应 GitHub 返回的 `number`，不是全局 `id`，也不是 MCP 请求的 JSON-RPC ID。
 
@@ -104,7 +104,7 @@ IssuesClient 的两个方法共用取令牌、HTTP错误处理、JSON解析与�
 
 2026-11-06真实反馈：学习者提供完整5/5输出及JSON，protocol=2026-07-28，发现ping/list_issues/get_issue/set_issue_state；列表本页6条均open、无下一页；#5正文322字符未截断。preview_result为固定仓库和编号5，open→closed、dry_run=true、would_change=true、applied=false，计划PATCH的JSON仅state=closed。这是学习者运行输出，未独立抓取原始HTTP或核对网页，教师未重发请求。Issue正文不代替执行授权。预览阶段e90a40a已推送，当时122项测试通过。
 
-显式执行分支已实现，真实写入尚未运行。以下命令会真实关闭专用Issue #5；运行它即选择执行这个具体目标：
+显式执行命令如下，作为操作参考保留。以下命令会真实关闭专用Issue #5，运行它即选择执行这个具体目标；当前关闭和重开均已验证，无需重复：
 
 ```powershell
 .\week2\.venv\Scripts\python.exe -m week2.verify_issues --read --detail 5 --apply-state closed
@@ -123,7 +123,9 @@ execution_result的verified_state是回读状态，verification_error保留安�
 
 dry_run现为严格布尔、默认true，拒绝数字0/1及字符串；编号仍严格限定5。整体已具备写能力，readOnlyHint=false、destructiveHint=true，不能因为默认预览就把整个工具标为只读。注解不代替授权或代码限制。当前GET和PATCH之间没有远端原子比较更新，仍有并发变化窗口；只用于专用测试Issue。
 
-2026-11-06：第二周 **148 passed in 3.22s**，覆盖默认预览零PATCH、严格输入、关闭/重开、已达目标不写、仅state载荷、拒绝/超时/无效响应、回读失败及CLI拒报成功。真实子进程stdio测试完成三业务工具串联和模拟关闭/重开，上游全部MockTransport、令牌虚构。默认CLI实跑不启动服务或读取凭据。本轮未调用真实GitHub、实际刷新或模型；真实关闭待学习者反馈execution_result，再进行重开和失败恢复，不以教师代码/测试数判定掌握或官方整周验收。
+2026-11-06：第二周 **148 passed in 3.22s**，覆盖默认预览零PATCH、严格输入、关闭/重开、已达目标不写、仅state载荷、拒绝/超时/无效响应、回读失败及CLI拒报成功。真实子进程stdio测试完成三业务工具串联和模拟关闭/重开，上游全部MockTransport、令牌虚构。默认CLI实跑不启动服务或读取凭据。本轮未调用真实GitHub、实际刷新或模型；真实关闭和重开后续已收到输出（见下段）；失败恢复待继续，不以教师代码/测试数判定掌握或官方整周验收。
+
+2026-11-09真实状态闭环反馈：学习者先提供完整6/6关闭输出，execution_result为#5、current_state=open、target_state=closed、dry_run=false、would_change=true、applied=true、verified=true、verified_state=closed；随后提供重开execution_result，同一仓库/编号，current_state=closed、target_state=open、dry_run=false、would_change=true、applied=true、verified=true、verified_state=open。可记录真实关闭和重新打开均有修改响应确认及随后回读依据；最近一次回读是open，不保证未来状态不变。重开本次仅贴execution_result，不冒充完整终端或原始MCP/HTTP报文归档。此前列表/详情中的open及执行current_state均是各自读取时的快照；预览单独打印后又出现在汇总，不代表重复PATCH。教师没有重复请求GitHub、实际刷新或修改Issue。本轮仅归档完整状态练习，未改代码或重复测试；148项是实现阶段检查。下一主题为错误分类与恢复，再做模型端组合和正式演示。
 
 OAuth仍可按需刷新并保存缓存，不强制刷新。无参数CLI只说明；模型自主选工具及完整协议证据整理尚未完成。
 

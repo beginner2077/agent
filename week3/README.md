@@ -1,6 +1,6 @@
 # 第三周：Agent Skills 与 CLI
 
-当前阶段：第一版Skill已编写并放入项目发现目录，格式检查通过，自动触发及端到端运行待实测。第二周[说明初稿](../week2/writeup.md)保留待复核项，不据此标所有课堂/阅读完成。
+本轮Skill评估已收齐四例反馈：关闭Superpowers的B组P1自动触发及端到端核心行为通过，P2/P3触发与核心核对通过（分别保留建议局限、资料辅助完成备注）；N1仅有最终答复，未见调用，未独立确认未加载。不能写成四例无保留全通过。说明初稿已整理，保留本人复核和课堂/阅读缺口。
 
 ## 课程与来源
 
@@ -64,7 +64,7 @@ New-Item -ItemType Directory -Path .claude/skills/issue-evidence-report -Force |
 Copy-Item -LiteralPath week3/skills/issue-evidence-report/SKILL.md -Destination .claude/skills/issue-evidence-report/SKILL.md
 ```
 
-2026-11-09已用skill-creator的quick_validate检查名称/frontmatter/占位符，结果Skill is valid；检查源文件与本地副本字节一致，且未配置disable-model-invocation。未运行模型触发或端到端测试，不以静态校验当效果证明。创建时使用skill-creator辅助，目标为用户选定的Claude环境，因此没有添加Codex UI元数据或全局安装。
+2026-11-09已用skill-creator的quick_validate检查名称/frontmatter/占位符，结果Skill is valid；检查源文件与本地副本字节一致，且未配置disable-model-invocation。当时尚未运行模型触发或端到端测试，后续实际记录见下文，不以静态校验当效果证明。创建时使用skill-creator辅助，目标为用户选定的Claude环境，因此没有添加Codex UI元数据或全局安装。
 
 从项目根目录每条开一个新会话，保持原来的模型与MCP配置：
 
@@ -72,4 +72,6 @@ Copy-Item -LiteralPath week3/skills/issue-evidence-report/SKILL.md -Destination 
 claude --settings "C:\Users\admin\.claude\settings-deepseek.json" --model haiku --mcp-config ".\week2\.mcp.json.example" --strict-mcp-config
 ```
 
-四条独立测试及判定在[evals.md](evals.md)。先测P1；不加Skill名字或斜杠命令，观察模型是否自行调用issue-evidence-report，并保留Skill调用、必要MCP结果和最终答复。仅看到/read或Skill正文不自动视为目标调用；若客户端明确通过读取载入指令，可记录实际加载途径，不能假定与自动Skill路由相同。显式调用可用于另行排障，但不填成自动触发通过。其余3例仍待执行，第二周150项测试不替代本周Skill评估。
+四条独立测试及判定在[evals.md](evals.md)。A组P1已见实际Skill加载及2次MCP业务查询，最终报告范围与摘要有据。本轮Skill评估已收齐四例反馈：关闭Superpowers的B组P1自动触发及端到端核心行为通过，P2/P3触发与核心核对通过（分别保留建议局限、资料辅助完成备注）；N1仅有最终答复，未见调用，未独立确认未加载。不能写成四例无保留全通过。说明初稿已整理，保留本人复核和课堂/阅读缺口。N1应不调用目标Skill；每例使用独立新会话，不加Skill名称或斜杠命令，观察实际调用与最终答复。评估期间v1保持不变，第二周测试不替代本周行为评估。
+
+本轮[学习说明初稿](writeup.md)待本人复核，不标整周课堂完成。

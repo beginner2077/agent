@@ -30,6 +30,8 @@
 ./.venv/Scripts/python.exe -m unittest -v tests.test_more.ChunkedTests
 ```
 
+聚焦范围按实际类/模块报告：上述类命令运行整个 `ChunkedTests`（包括既有用例），不执行模块级 `load_tests()`，不含额外注册的源码 doctest；模块命令会加载对应 doctest。
+
 安装开发工具后，按改动选择检查；完整 CI 定义见 `.github/workflows/python-app.yml` 和 `Makefile`：
 
 ```text

@@ -2,6 +2,26 @@
 
 当前状态（2026-11-11）：两项用户模型任务与一次指南改进已归档；目标测试及指南修订提交2d8d34f已推自己的fork，目标根目录与[66行课程副本](CLAUDE.md)一致。[writeup事实草稿](writeup.md)已整理，待本人复核；完整CI、修订后模型效果、第四周课堂材料的全部覆盖及正式提交仍未完成。任务1本地935项通过；任务2仅新增一个测试方法，聚焦8项通过，Ruff缺失未完成；其报告范围错误已纠正，不写成所有报告都正确。
 
+## 第四周课堂导读（2026-11-11，继续中）
+
+已通过第三方课程目录找到原始链接，再直接读取[10月13日官方讲义的14页文字与备注](https://docs.google.com/presentation/d/152VaUifBKH4T6hxd6fCKKM9kJTSAuBmkF8zSYwuTYAo/htmlpresent)，封面确认Stanford Fall2026。第三方笔记仅作定位入口，不作为授课内容依据。官网首页可读，但本机HTTP连接超时、网页工具未展开Syllabus，故未宣称重新核完完整官网课表；10月15日客座课材料尚未独立核实。
+
+讲义覆盖：第3—4页API/MCP/Skills比较；第7—8页四种定制方式与仓库规则；第9页Hooks；第10页Skills；第11页Subagents；第12页MCP用途；第13页上下文来源。当前先中文导读四种机制分工，结合已完成任务说明：常驻事实放CLAUDE.md，特定流程放Skill，事件触发的检查交给Hook，独立旁支工作可委派子代理。不是要求全部安装，也不把指南加载等同遵守。
+
+补充核对[Anthropic定制方式说明](https://claude.com/resources/articles/steering-claude-code-skills-hooks-rules-subagents-and-more)与[Hooks指南的机制/事件相关段落](https://code.claude.com/docs/en/hooks-guide)：事件触发与处理器判断分别讨论；命令Hook可执行程序检查，prompt/agent类型仍使用模型判断。PreToolUse在工具前，PostToolUse在成功后，PostToolUseFailure对应失败；后置检查不回滚既有改动。以Ruff缺失说明启动检查失败和代码未通过检查不同，不能靠Hook配置自动消除环境缺口。
+
+已继续核对[Hooks reference](https://code.claude.com/docs/en/hooks)的输入、matcher、PreToolUse决策与退出码段落，中文导读以简化Edit事件串联：harness向command处理器stdin发送JSON，matcher先选工具，脚本再查参数/路径，处理器向stdout返回结构化deny及理由，harness阻止并反馈模型。区分不作决定的exit0与显式allow；PreToolUse可用exit2/stderr阻止，普通检查错误不自动等于阻止，按事件/输出/失败配置判断。示例仅用于接口讲解，不是本机真实Hook日志或配置；匹配Edit/Write不覆盖Bash等写入通道。当前文档所述具体行为未在用户安装版本实测。
+
+子代理核心已继续中文导读，补充核对[官方subagents文档](https://code.claude.com/docs/en/sub-agents)的启动上下文、工作目录和链式委派段落：普通新子代理依据委派消息工作，不能默认继承全部对话；fork是需分别讨论的例外。交接应含目标、准确目录/文件状态、范围/工具限制和返回证据。以只读调查聚焦测试是否附带doctest为自拟案例，返回结论、代码位置、是否实际执行及未确认项；主代理仍需核对是否适用于当前修改后的文件。上下文隔离不等于文件隔离，worktree仍需核对起点/未提交修改/外部共享资源；planner→implementer→reviewer通常有依赖，不应机械全并行，也不因角色名就赋予写权限或保证独立正确。未运行真实委派或设置模型。
+
+四机制综合设计已导读：按问题选择机制，规则文件记录稳定事实与入口，Skill组织反复出现的流程，Hook触发合适范围的检查，子代理承担可独立验收的旁支。自拟工作流以修改→格式化→测试→只读审查→核对diff/报告串联，检查结果绑定文件状态；工具缺失保留未验证项，不擅自安装。命令和格式规则优先复用仓库现有Makefile/pyproject等来源，避免在规则/Skill/Hook中维护多套不同标准；不是要求当前仓库增加这些配置。补充核对best-practices的模型指令与harness执行、检查与边界相关段落。
+
+综合题已收到学习者反馈：提出集中修改后再测试，方向合理；备选每次Edit新建子代理/worktree仍重复执行，且新worktree不自动携带未提交改动，已说明需绑定正确快照，失败后先修复复测，独立只读审查可考虑并行。本题为设计讨论，未开展真实并行或隔离实验，不标独立完整设计通过。
+
+指定阅读[I Still Prefer MCP Over Skills](https://david.coffee/i-still-prefer-mcp-over-skills/)已读取网页文字，下一段中文导读重点是外部连接与流程知识的分工、远程部署/授权/升级的维护责任，以及Skill组合MCP的方案。以本项目stdio GitHub MCP和issue-evidence-report对照，区分已实现的服务端约束与提示规则。作者的远程MCP便利性是取舍观点，不将所有MCP等同零安装、自动OAuth、安全隔离或自动升级。补充核对[MCP 2025-11-25授权规范的范围](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)：客户端到HTTP MCP的授权与本项目server到GitHub的OAuth分别讨论，不将该规范冒充当前会话协商版本。
+
+Factory指定阅读旧路径本轮不可读，已定位并读取[当前AGENTS.md文档](https://docs.factory.com/harness/agents-md)；其具体加载/优先级行为属于Droid，尚待下一节中文导读，不推断Claude已启用同样机制。14页视觉布局、现场演示、链接示例与10/15客座来源仍未完整核对，不标整周完成。未创建Hook、安装依赖、启动子代理或调用模型。
+
 ## 官方目标与边界
 
 依据[本地官方作业](../course-assignments/week4/assignment.md)与[远端官方作业](https://github.com/mihail911/modern-software-dev-assignments/blob/master/week4/assignment.md)：选择陌生且非本人编写的开源仓库，fork后查清实际结构/命令/约定/生成目录，写一页左右AGENTS.md或CLAUDE.md，再观察两项小任务并提出有依据的改进。本项目继续Claude路线，优先CLAUDE.md。

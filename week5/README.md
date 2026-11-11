@@ -1,6 +1,6 @@
 # 第五周：Agent-Ready Codebases
 
-当前状态（2026-11-11）：开始课堂中文导读，尚未安装Droid、选择三个仓库或生成报告。
+当前状态（2026-11-11）：课堂可读文字核心已导读。用户暂不使用Factory，人工三仓库对比已核对第一项测试入口；用户随后反馈当前内容收益低，现压缩并停止继续展开比较，主线转Agent代码审查。保留现有证据，不安装/登录Droid或编造成熟度；官方三份Factory报告及人工完整比较均未完成，不能标整周作业完成。
 
 ## 已读取的原始材料
 
@@ -43,4 +43,22 @@
 
 讲义中的hermetic build补充参考[Bazel官方概念](https://bazel.build/basics/hermeticity)：工具/依赖等输入受控，隔离宿主机隐含依赖，以同输入得到一致输出为目标；独立venv或容器不是自动成立的证明。无需给当前小库引入Bazel。教学假设示例为A重命名函数并修既有调用、B在旧基线新增旧名调用；两边各自通过仍可能在集成后失败，非本地已发生故障。云Agent/编排工具可接管环境创建与调度，仍需核对结果/边界，不为当前练习新增平台或启动代理。
 
-10/20讲义可读文字的主要概念已分节导读，行政内容压缩，效率主张不作效果证明；视觉、视频、现场DEMO/链接工具及10/22客座另保留范围。下一步三仓库选型与Droid报告运行前提，不把课堂导读记成作业完成。未正式评分more-itertools，未安装工具、登录新服务、调用模型或重复运行测试。
+10/20讲义可读文字的主要概念已分节导读，行政内容压缩，效率主张不作效果证明；视觉、视频、现场DEMO/链接工具及10/22客座另保留范围。不把课堂导读记成作业完成。
+
+## 适配练习：三仓库人工证据对比
+
+选择more-itertools、htmx、Slidev，对比Python工具库、JavaScript浏览器库与TypeScript多包项目。公开GitHub API核对默认分支、提交及仓库创建时间；创建时间不是项目起源，API size含Git仓库数据也不是当前源码行数，不将其直接当作代码规模。
+
+| 仓库 | 固定提交 | GitHub仓库创建年份 | 本轮读取的第一条验证链 |
+| --- | --- | --- | --- |
+| more-itertools/more-itertools | ceafee8ce96f4bc1eb74c528bc247c91d648a0bb | 2012 | Makefile test目标调用python -m unittest -v；check/coverage/docs/package另有目标 |
+| bigskysoftware/htmx | fa978b24e75fb03c137bf2cdae4fef0e711cf8a1 | 2020 | package.json的test串联lint、types-check和test:chrome；后者先playwright install chromium再运行浏览器测试，test:ci另含多浏览器 |
+| slidevjs/slidev | 437f139ccd4c8482a193b217922e7800a5b3baec | 2021 | package.json test为vitest test；verify串联build/typecheck/lint/test，CONTRIBUTING明确workspace包需先构建dist |
+
+固定版本原始依据：[more-itertools Makefile](https://github.com/more-itertools/more-itertools/blob/ceafee8ce96f4bc1eb74c528bc247c91d648a0bb/Makefile)、[htmx package.json](https://github.com/bigskysoftware/htmx/blob/fa978b24e75fb03c137bf2cdae4fef0e711cf8a1/package.json)、[Slidev package.json](https://github.com/slidevjs/slidev/blob/437f139ccd4c8482a193b217922e7800a5b3baec/package.json)与[CONTRIBUTING](https://github.com/slidevjs/slidev/blob/437f139ccd4c8482a193b217922e7800a5b3baec/CONTRIBUTING.md)。此前浮动分支文件已再用这些提交读取确认，不混为同一抓取。
+
+本地准备：独立上游副本.tools/course-repos/week5-more-itertools克隆成功，HEAD=ceafee8、工作树干净、39个受Git跟踪文件，不复用第四周含自写指南/测试的fork。htmx/Slidev浅克隆无下载进展，经核对命令行只终止本轮对应两个clone进程树，未清理或覆盖目录；两者仅有不完整.git目录，不能当完整checkout，后续改读固定提交公开文件。网络原因未确诊，不归咎代码或Agent准备度。没有运行测试、项目安装脚本、依赖安装、提交上游修改或读取凭据。未运行Droid或模型请求。
+
+第一项结论：测试入口名称不是检查范围；先读脚本展开、前置依赖和贡献说明，不能把三个test都当同等完整验证。配置/文档观察不等执行成功，htmx的测试命令还可触发浏览器安装。原拟继续CI与前置核对，现按用户收益反馈停止深入，不再等克隆/安装或凑三份人工评分；当前仅保留上述局部比较，不用人工表格替代官方三份原始报告。
+
+后续教学取舍：对在职开发者压缩已有工程常识、减少仓库启动/测试入口的重复微问答，转向审查真实问题、安全边界、后台任务可靠性、效果评估和团队集成。保持官方材料核对与中文连续讲解，不能将教师自拟重点冒充完整课堂内容。

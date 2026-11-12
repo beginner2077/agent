@@ -246,3 +246,5 @@ claude --settings "C:\Users\admin\.claude\settings-deepseek.json" --model haiku 
 本阶段可迁移的方法：先用固定版本确定事实，再把反复有用的知识写成简短常驻上下文；用实际任务观察加载、工具行为与最终报告，分别评价；依据真实缺口修改规则，并保留尚未验证的范围。成功执行和准确报告都要核对，不能互相替代。
 
 下一步先核对第四周官网课堂材料与当前作业的覆盖关系，补讲未导读的核心内容，再决定进入后续专题；不因作业交付文件齐备就默认整周已完成。
+
+停止与异步检查补充（2026-11-12）：据当前[Hooks reference](https://code.claude.com/docs/en/hooks#stop)补Stop事件/阻止结束与反馈、stop_hook_active的含义；command Hook可自己执行检查，模型tool_use并非所有本机执行的完整记录。复用验证必须绑定相关输入状态、命令、范围与环境，不能把旧935项全套自动更新为新增后的完整验证。[异步Hook](https://code.claude.com/docs/en/hooks#run-hooks-in-the-background)启动后不等待、普通结果下一轮投递，不能事后阻止动作；每次触发可能形成独立检查进程。固定快照下迟到结果归原状态，同键去重/合并最新待测状态是教师设计分析，不宣称ClaudeCode内置或本机已启用。三节仅机制补充，无Hook安装、执行或性能实验，不补齐课堂视觉/演示和正式作业缺口；此分支收束。
